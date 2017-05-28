@@ -1,0 +1,8 @@
+[package]
+name = "completers"
+version = "0.1.0"
+authors = ["Sławek Rudnicki <slawek.rudnicki@gmail.com>"]
+
+[dependencies]
+ansi-escapes = "0.1.0"
+ansi_term = "0.9"
