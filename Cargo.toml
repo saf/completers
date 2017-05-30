@@ -4,5 +4,7 @@ version = "0.1.0"
 authors = ["Sławek Rudnicki <slawek.rudnicki@gmail.com>"]
 
 [dependencies]
-ansi-escapes = "0.1.0"
-ansi_term = "0.9"
+clap = "2.24.2"
+ctrlc = "3.0.2"
+termion = "1.3.0"
+termios = "0.2.2"
