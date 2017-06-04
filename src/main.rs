@@ -5,12 +5,12 @@ extern crate completers;
 use std::io;
 use std::io::Write;
 
-use completers::completers::numbers;
+use completers::completers::filesystem;
 use completers::ui;
 
 
 fn complete(line: String) -> io::Result<(String, i16)> {
-    let completer = numbers::NumCompleter::new(1000);
+    let completer = filesystem::FsCompleter::new();
     return ui::get_completion(line, &completer);
 }
 

@@ -6,8 +6,8 @@ use super::super::core;
 pub struct NumCompletion(String);
 
 impl core::Completion for NumCompletion {
-    fn result_string(&self) -> &str {
-        self.0.as_str()
+    fn result_string(&self) -> String {
+        self.0.clone()
     }
 
     fn has_children(&self) -> bool {

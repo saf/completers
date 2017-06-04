@@ -13,12 +13,12 @@
 /// which is used if the completion is selected), but some completions
 /// may override that, hence the distinction between `display_string`
 /// and `result_string`.
-pub trait Completion : 'static {
+pub trait Completion {
     /// Returns the string which should be used as the completion.
-    fn result_string(&self) -> &str;
+    fn result_string(&self) -> String;
 
     /// Returns the string to be shown in the selection UI.
-    fn display_string(&self) -> &str {
+    fn display_string(&self) -> String {
         self.result_string()
     }
 
