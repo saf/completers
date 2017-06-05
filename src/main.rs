@@ -10,8 +10,8 @@ use completers::ui;
 
 
 fn complete(line: String) -> io::Result<(String, i16)> {
-    let completer = filesystem::FsCompleter::new();
-    return ui::get_completion(line, &completer);
+    let mut completer = filesystem::FsCompleter::new();
+    return ui::get_completion(line, &mut completer);
 }
 
 fn main() {

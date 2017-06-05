@@ -17,21 +17,25 @@ const CHOOSER_HEIGHT: usize = 10;
 
 const WORD_BOUNDARIES: &'static [char] = &[' ', '(', ')', ':', '`'];
 
-struct ViewState<'a> {
-    propositions: &'a [Box<core::Completion>],
+struct LevelViewState {
+    propositions: Vec<Box<core::Completion>>,
     view_offset: usize,
     selection: usize,
     query: String,
 }
 
-impl<'a> ViewState<'a> {
-    pub fn new(propositions: &'a [Box<core::Completion>]) -> ViewState<'a> {
-        ViewState {
+impl LevelViewState {
+    pub fn new(propositions: Vec<Box<core::Completion>>) -> LevelViewState {
+        LevelViewState {
             propositions: propositions,
             view_offset: 0,
             selection: 0,
             query: "".to_string(),
         }
+    }
+
+    fn selected_completion(&self) -> &core::Completion {
+        &*self.propositions[self.selection]
     }
 
     pub fn select_previous(&mut self) {
@@ -79,9 +83,97 @@ impl<'a> ViewState<'a> {
     pub fn query_append(&mut self, ch: char) {
         self.query.push(ch);
     }
+
+    pub fn query_set(&mut self, query: &str) {
+        self.query = query.to_string();
+    }
+
+    pub fn query(&self) -> String {
+        self.query.clone()
+    }
 }
 
-fn print_state(term: &mut File, state: &ViewState) -> io::Result<()> {
+struct ViewState {
+    levels_stack: Vec<LevelViewState>,
+}
+
+impl ViewState {
+    pub fn new(completer: &core::Completer) -> ViewState {
+        ViewState {
+            levels_stack: vec![LevelViewState::new(completer.completions())],
+        }
+    }
+
+    pub fn top(&self) -> &LevelViewState {
+        self.levels_stack.last().unwrap()
+    }
+
+    fn selected_completion(&self) -> &core::Completion {
+        self.top().selected_completion()
+    }
+
+    pub fn get_selected_result(&self) -> String {
+        self.top().selected_completion().result_string()
+    }
+
+    pub fn select_previous(&mut self) {
+        self.levels_stack.last_mut().unwrap().select_previous();
+    }
+
+    pub fn select_next(&mut self) {
+        self.levels_stack.last_mut().unwrap().select_next();
+    }
+
+    pub fn previous_page(&mut self) {
+        self.levels_stack.last_mut().unwrap().previous_page();
+    }
+
+    pub fn next_page(&mut self) {
+        self.levels_stack.last_mut().unwrap().next_page();
+    }
+
+    pub fn select_first(&mut self) {
+        self.levels_stack.last_mut().unwrap().select_first();
+    }
+
+    pub fn select_last(&mut self) {
+        self.levels_stack.last_mut().unwrap().select_last();
+    }
+
+    pub fn query_backspace(&mut self) {
+        self.levels_stack.last_mut().unwrap().query.pop();
+    }
+
+    pub fn query_append(&mut self, ch: char) {
+        self.levels_stack.last_mut().unwrap().query.push(ch);
+    }
+
+    pub fn query_set(&mut self, query: &str) {
+        self.levels_stack.last_mut().unwrap().query_set(query);
+    }
+
+    pub fn query(&self) -> String {
+        self.top().query().clone()
+    }
+
+    fn descend(&mut self, completer: &core::Completer) {
+        self.levels_stack.push(LevelViewState::new(completer.completions()));
+    }
+
+    fn is_descended(&self) -> bool {
+        self.levels_stack.len() > 1
+    }
+
+    fn ascend(&mut self) {
+        self.levels_stack.pop();
+    }
+
+    fn switch_base(&mut self, completer: &core::Completer) {
+        self.levels_stack[0] = LevelViewState::new(completer.completions());
+    }
+}
+
+fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
     let off = state.view_offset;
     let prompt = "  Search: ";
     let status_string = format!("STATUS {:?} {:?} ql {:?}", off, state.selection, state.query.len());
@@ -112,55 +204,81 @@ fn print_state(term: &mut File, state: &ViewState) -> io::Result<()> {
     return Result::Ok(());
 }
 
-pub fn get_completion(mut line: String, completer: &core::Completer) -> io::Result<(String, i16)> {
-    let mut term = termion::get_tty()?;
-    let propositions = completer.completions();
-    let mut state = ViewState::new(propositions);
+pub fn get_initial_query(line: &str) -> String {
     let line_length = line.len();
     let last_word_boundary = line.rfind(WORD_BOUNDARIES);
     let word_index = match last_word_boundary {
         None => 0,
         Some(index) => index + 1,
     };
-    let original_query: String = if word_index >= line_length {
+
+    if word_index >= line_length {
         "".to_string()
     } else {
         line[word_index..].to_string()
-    };
-    state.query = original_query.clone();
+    }
+}
+
+pub fn get_completion(mut line: String, completer: &mut core::Completer)
+                      -> io::Result<(String, i16)> {
+    let mut term = termion::get_tty()?;
+    let mut state = ViewState::new(completer);
+
+    let original_query = get_initial_query(line.as_str());
+    state.query_set(original_query.as_str());
 
     let original_terminal_state = terminal::prepare()?;
     write!(term, "{}", termion::cursor::Right(30))?;
-    print_state(&mut term, &state)?;
+
+    print_state(&mut term, state.top()).unwrap();
+
     let mut result = String::new();
 
     for key_result in io::stdin().keys() {
         match key_result.unwrap() {
-            Up => state.select_previous(),
-            Down => state.select_next(),
-            PageUp => state.previous_page(),
-            PageDown => state.next_page(),
-            Home => state.select_first(),
-            End => state.select_last(),
+            Up         => state.select_previous(),
+            Down       => state.select_next(),
+            PageUp     => state.previous_page(),
+            PageDown   => state.next_page(),
+            Home       => state.select_first(),
+            End        => state.select_last(),
 
-            Char('\n') => { result = propositions[state.selection].result_string().to_string(); break },
-            Ctrl('c') => { result = original_query; break },
-            Char(c) => state.query_append(c),
-            Backspace => state.query_backspace(),
+            Left       => {
+                if completer.can_ascend() {
+                    completer.ascend();
+                    if state.is_descended() {
+                        state.ascend();
+                    } else {
+                        state.switch_base(completer);
+                    }
+                }
+            }
+            Right      => {
+                if completer.can_descend(state.selected_completion()) {
+                    completer.descend(state.selected_completion());
+                    state.descend(completer);
+                }
+            }
+
+            Char('\n') => { result = state.get_selected_result(); break },
+            Ctrl('c')  => { result = original_query.clone(); break },
+            Char(c)    => state.query_append(c),
+            Backspace  => state.query_backspace(),
 
             _ => {},
         }
-        print_state(&mut term, &state)?;
+        print_state(&mut term, state.top())?;
     }
 
     clear()?;
     terminal::restore(original_terminal_state)?;
 
-    let original_length = (line.len() - word_index) as i16;
-    let new_length = result.len() as i16;
-    line.truncate(word_index);
+    let line_length = line.len();
+    let original_length = original_query.len();
+    let new_length = result.len();
+    line.truncate(line_length - original_length);
     line.push_str(&result);
-    return Result::Ok((line, new_length - original_length));
+    return Result::Ok((line, (new_length - original_length) as i16));
 }
 
 pub fn clear() -> io::Result<()> {

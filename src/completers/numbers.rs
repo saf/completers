@@ -1,6 +1,8 @@
 //! This defines a completer for numbers which is used for testing the
 //! completers API.
 
+use std::any;
+
 use super::super::core;
 
 pub struct NumCompletion(String);
@@ -10,31 +12,27 @@ impl core::Completion for NumCompletion {
         self.0.clone()
     }
 
-    fn has_children(&self) -> bool {
-        false
-    }
-
-    fn children(&self) -> Vec<Box<core::Completion>> {
-        vec![]
+    fn as_any(&self) -> &any::Any {
+        self
     }
 }
 
 pub struct NumCompleter {
-    completions: Vec<Box<core::Completion>>,
+    count: usize,
 }
 
 impl NumCompleter {
     pub fn new(count: usize) -> NumCompleter {
-        let mut boxes: Vec<Box<core::Completion>> = vec![];
-        for b in (0..count).map(|n| format!("{}", n)).map(|s| Box::new(NumCompletion(s))) {
-            boxes.push(b);
-        }
-        NumCompleter { completions: boxes }
+        NumCompleter { count: count }
     }
 }
 
 impl core::Completer for NumCompleter {
-    fn completions(&self) -> &[Box<core::Completion>] {
-        self.completions.as_slice()
+    fn completions(&self) -> Vec<Box<core::Completion>> {
+        let mut boxes: Vec<Box<core::Completion>> = vec![];
+        for b in (0..self.count).map(|n| format!("{}", n)).map(|s| Box::new(NumCompletion(s))) {
+            boxes.push(b);
+        }
+        boxes
     }
 }

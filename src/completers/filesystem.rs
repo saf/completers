@@ -1,6 +1,7 @@
 //! This defines the completer which provides completions of file
 //! names existing in the local file system.
 
+use std::any;
 use std::fs;
 use std::path;
 
@@ -9,7 +10,7 @@ use termion::color;
 use super::super::core;
 
 #[derive(PartialEq)]
-enum FsCompletionType {
+enum FsEntryType {
     Directory,
     File,
     Error,
@@ -17,7 +18,7 @@ enum FsCompletionType {
 
 struct FsCompletion {
     relative_path: path::PathBuf,
-    entry_type: FsCompletionType,
+    entry_type: FsEntryType,
 }
 
 impl FsCompletion {
@@ -28,11 +29,11 @@ impl FsCompletion {
             let entry_type = match entry.metadata() {
                 Ok(md) =>
                     if md.is_dir() {
-                        FsCompletionType::Directory
+                        FsEntryType::Directory
                     } else {
-                        FsCompletionType::File
+                        FsEntryType::File
                     },
-                _ => FsCompletionType::Error
+                _ => FsEntryType::Error
             };
 
             let here_prefix = path::Path::new("./");
@@ -56,7 +57,7 @@ impl core::Completion for FsCompletion {
     }
 
     fn display_string(&self) -> String {
-        if self.entry_type == FsCompletionType::Directory {
+        if self.entry_type == FsEntryType::Directory {
             format!("{}{}{}", color::Fg(color::Blue),
                     self.result_string(), color::Fg(color::Reset))
         } else {
@@ -64,29 +65,37 @@ impl core::Completion for FsCompletion {
         }
     }
 
-    fn has_children(&self) -> bool {
-        self.entry_type == FsCompletionType::Error
-    }
-
-    fn children(&self) -> Vec<Box<core::Completion>> {
-        FsCompletion::get_completions(self.relative_path.as_path())
+    fn as_any(&self) -> &any::Any {
+        self
     }
 }
 
 pub struct FsCompleter {
-    completions: Vec<Box<core::Completion>>,
+    current_path: path::PathBuf,
 }
 
 impl FsCompleter {
     pub fn new() -> FsCompleter {
-        FsCompleter {
-            completions: FsCompletion::get_completions(path::Path::new(".")),
-        }
+        FsCompleter { current_path: path::PathBuf::from(".") }
     }
 }
 
 impl core::Completer for FsCompleter {
-    fn completions(&self) -> &[Box<core::Completion>] {
-        self.completions.as_slice()
+    fn completions(&self) -> Vec<Box<core::Completion>> {
+        FsCompletion::get_completions(self.current_path.as_path())
+    }
+
+    fn can_descend(&self, completion: &core::Completion) -> bool {
+        let completion_any = completion.as_any();
+        match completion_any.downcast_ref::<FsCompletion>() {
+            Some(&FsCompletion { entry_type: FsEntryType::Directory, .. }) => true,
+            _ => false
+        }
+    }
+
+    fn descend(&mut self, completion: &core::Completion) {
+        let completion_any = completion.as_any();
+        let fs_completion = completion_any.downcast_ref::<FsCompletion>().unwrap();
+        self.current_path.push(fs_completion.relative_path.file_name().unwrap());
     }
 }
