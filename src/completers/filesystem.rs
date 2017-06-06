@@ -104,4 +104,21 @@ impl core::Completer for FsCompleter {
         let fs_completion = completion_any.downcast_ref::<FsCompletion>().unwrap();
         self.current_path.push(fs_completion.relative_path.file_name().unwrap());
     }
+
+    fn can_ascend(&self) -> bool {
+        self.current_path != path::Path::new("/")
+    }
+
+    fn ascend(&mut self) {
+        if self.current_path.ends_with(path::Path::new(".")) {
+            self.current_path = path::PathBuf::from("..");
+        } else if self.current_path.ends_with(path::Path::new("..")) {
+            self.current_path.push(path::Path::new(".."));
+        } else {
+            self.current_path.pop();
+        }
+        if self.current_path.canonicalize().unwrap() == path::Path::new("/") {
+            self.current_path = path::PathBuf::from("/");
+        }
+    }
 }
