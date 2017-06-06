@@ -41,12 +41,18 @@ impl FsCompletion {
             if path.starts_with(here_prefix) {
                 path = path.strip_prefix(here_prefix).unwrap().to_path_buf();
             }
+            if let Some(s) = path.file_name().and_then(|f| f.to_str()) {
+                if s.starts_with(".") {
+                    continue;
+                }
+            }
             
             boxes.push(Box::new(FsCompletion {
                 relative_path: path,
                 entry_type: entry_type,
             }));
         }
+        boxes.sort_by_key(|b| b.result_string());
         boxes
     }
 }
