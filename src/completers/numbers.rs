@@ -2,8 +2,9 @@
 //! completers API.
 
 use std::any;
+use std::rc::Rc;
 
-use super::super::core;
+use core;
 
 pub struct NumCompletion(String);
 
@@ -28,11 +29,11 @@ impl NumCompleter {
 }
 
 impl core::Completer for NumCompleter {
-    fn completions(&self) -> Vec<Box<core::Completion>> {
-        let mut boxes: Vec<Box<core::Completion>> = vec![];
-        for b in (0..self.count).map(|n| format!("{}", n)).map(|s| Box::new(NumCompletion(s))) {
-            boxes.push(b);
+    fn completions(&self) -> core::Completions {
+        let mut completions: core::Completions = vec![];
+        for rc in (0..self.count).map(|n| format!("{}", n)).map(|s| Rc::new(NumCompletion(s))) {
+            completions.push(rc);
         }
-        boxes
+        completions
     }
 }

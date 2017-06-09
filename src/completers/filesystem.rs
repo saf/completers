@@ -4,10 +4,11 @@
 use std::any;
 use std::fs;
 use std::path;
+use std::rc::Rc;
 
 use termion::color;
 
-use super::super::core;
+use core;
 
 #[derive(PartialEq)]
 enum FsEntryType {
@@ -19,42 +20,6 @@ enum FsEntryType {
 struct FsCompletion {
     relative_path: path::PathBuf,
     entry_type: FsEntryType,
-}
-
-impl FsCompletion {
-    fn get_completions(dir_path: &path::Path) -> Vec<Box<core::Completion>> {
-        let mut boxes: Vec<Box<core::Completion>> = Vec::new();
-        let mut entries = fs::read_dir(dir_path).unwrap();
-        while let Some(Ok(entry)) = entries.next() {
-            let entry_type = match entry.metadata() {
-                Ok(md) =>
-                    if md.is_dir() {
-                        FsEntryType::Directory
-                    } else {
-                        FsEntryType::File
-                    },
-                _ => FsEntryType::Error
-            };
-
-            let here_prefix = path::Path::new("./");
-            let mut path = dir_path.join(entry.file_name());
-            if path.starts_with(here_prefix) {
-                path = path.strip_prefix(here_prefix).unwrap().to_path_buf();
-            }
-            if let Some(s) = path.file_name().and_then(|f| f.to_str()) {
-                if s.starts_with(".") {
-                    continue;
-                }
-            }
-            
-            boxes.push(Box::new(FsCompletion {
-                relative_path: path,
-                entry_type: entry_type,
-            }));
-        }
-        boxes.sort_by_key(|b| b.result_string());
-        boxes
-    }
 }
 
 impl core::Completion for FsCompletion {
@@ -78,17 +43,58 @@ impl core::Completion for FsCompletion {
 
 pub struct FsCompleter {
     current_path: path::PathBuf,
+    completions: core::Completions,
 }
 
 impl FsCompleter {
     pub fn new() -> FsCompleter {
-        FsCompleter { current_path: path::PathBuf::from(".") }
+        let mut completer = FsCompleter {
+            current_path: path::PathBuf::from("."),
+            completions: core::Completions::new(),
+        };
+        completer.update_completions();
+        completer
+    }
+
+    fn update_completions(&mut self) {
+        let root_path = self.current_path.as_path();
+        let mut completions: core::Completions = Vec::new();
+        let mut entries = fs::read_dir(root_path).unwrap();
+        while let Some(Ok(entry)) = entries.next() {
+            let entry_type = match entry.metadata() {
+                Ok(md) =>
+                    if md.is_dir() {
+                        FsEntryType::Directory
+                    } else {
+                        FsEntryType::File
+                    },
+                _ => FsEntryType::Error
+            };
+
+            let here_prefix = path::Path::new("./");
+            let mut path = root_path.join(entry.file_name());
+            if path.starts_with(here_prefix) {
+                path = path.strip_prefix(here_prefix).unwrap().to_path_buf();
+            }
+            if let Some(s) = path.file_name().and_then(|f| f.to_str()) {
+                if s.starts_with(".") {
+                    continue;
+                }
+            }
+
+            completions.push(Rc::new(FsCompletion {
+                relative_path: path,
+                entry_type: entry_type,
+            }));
+        }
+        completions.sort_by_key(|b| b.result_string());
+        self.completions = completions;
     }
 }
 
 impl core::Completer for FsCompleter {
-    fn completions(&self) -> Vec<Box<core::Completion>> {
-        FsCompletion::get_completions(self.current_path.as_path())
+    fn completions(&self) -> core::Completions {
+        self.completions.clone()
     }
 
     fn can_descend(&self, completion: &core::Completion) -> bool {
@@ -103,6 +109,7 @@ impl core::Completer for FsCompleter {
         let completion_any = completion.as_any();
         let fs_completion = completion_any.downcast_ref::<FsCompletion>().unwrap();
         self.current_path.push(fs_completion.relative_path.file_name().unwrap());
+        self.update_completions();
     }
 
     fn can_ascend(&self) -> bool {
@@ -120,5 +127,6 @@ impl core::Completer for FsCompleter {
         if self.current_path.canonicalize().unwrap() == path::Path::new("/") {
             self.current_path = path::PathBuf::from("/");
         }
+        self.update_completions();
     }
 }

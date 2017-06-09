@@ -18,14 +18,14 @@ const CHOOSER_HEIGHT: usize = 10;
 const WORD_BOUNDARIES: &'static [char] = &[' ', '(', ')', ':', '`'];
 
 struct LevelViewState {
-    propositions: Vec<Box<core::Completion>>,
+    propositions: core::Completions,
     view_offset: usize,
     selection: usize,
     query: String,
 }
 
 impl LevelViewState {
-    pub fn new(propositions: Vec<Box<core::Completion>>) -> LevelViewState {
+    pub fn new(propositions: core::Completions) -> LevelViewState {
         LevelViewState {
             propositions: propositions,
             view_offset: 0,

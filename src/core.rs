@@ -2,6 +2,7 @@
 //! completions and completion providers (aka Completers).
 
 use std::any;
+use std::rc::Rc;
 
 /// A trait representing a single completion.
 ///
@@ -31,13 +32,17 @@ pub trait Completion : any::Any {
     fn as_any(&self) -> &any::Any;
 }
 
+/// The type of collections of completions passed from the completers
+/// to the UI.
+pub type Completions = Vec<Rc<Completion>>;
+
 /// A trait for types which provide completions.
 ///
 /// complete-rs can support multiple completion providers and switch
 /// between them in run-time.
 pub trait Completer {
     /// Returns the completions provided by this completer.
-    fn completions(&self) -> Vec<Box<Completion>>;
+    fn completions(&self) -> Completions;
 
     /// Indicates if the completer can 'descend' into the given completion.
     ///
