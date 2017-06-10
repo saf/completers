@@ -19,15 +19,18 @@ const WORD_BOUNDARIES: &'static [char] = &[' ', '(', ')', ':', '`'];
 
 struct LevelViewState {
     propositions: core::Completions,
+    fetching_done: bool,
     view_offset: usize,
     selection: usize,
     query: String,
 }
 
 impl LevelViewState {
-    pub fn new(propositions: core::Completions) -> LevelViewState {
+    pub fn new(completions_result: core::GetCompletionsResult) -> LevelViewState {
+        let core::GetCompletionsResult(completions, fetching_done) = completions_result;
         LevelViewState {
-            propositions: propositions,
+            propositions: completions,
+            fetching_done: fetching_done,
             view_offset: 0,
             selection: 0,
             query: "".to_string(),
@@ -100,7 +103,7 @@ struct ViewState {
 impl ViewState {
     pub fn new(completer: &core::Completer) -> ViewState {
         ViewState {
-            levels_stack: vec![LevelViewState::new(completer.completions())],
+            levels_stack: vec![LevelViewState::new(completer.get_completions())],
         }
     }
 
@@ -157,7 +160,7 @@ impl ViewState {
     }
 
     fn descend(&mut self, completer: &core::Completer) {
-        self.levels_stack.push(LevelViewState::new(completer.completions()));
+        self.levels_stack.push(LevelViewState::new(completer.get_completions()));
     }
 
     fn is_descended(&self) -> bool {
@@ -169,7 +172,7 @@ impl ViewState {
     }
 
     fn switch_base(&mut self, completer: &core::Completer) {
-        self.levels_stack[0] = LevelViewState::new(completer.completions());
+        self.levels_stack[0] = LevelViewState::new(completer.get_completions());
     }
 }
 

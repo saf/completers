@@ -29,11 +29,11 @@ impl NumCompleter {
 }
 
 impl core::Completer for NumCompleter {
-    fn completions(&self) -> core::Completions {
+    fn get_completions(&self) -> core::GetCompletionsResult {
         let mut completions: core::Completions = vec![];
         for rc in (0..self.count).map(|n| format!("{}", n)).map(|s| Rc::new(NumCompletion(s))) {
             completions.push(rc);
         }
-        completions
+        core::GetCompletionsResult(completions, true)
     }
 }

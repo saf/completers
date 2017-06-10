@@ -124,8 +124,8 @@ impl FsCompleter {
 }
 
 impl core::Completer for FsCompleter {
-    fn completions(&self) -> core::Completions {
-        self.completions.clone()
+    fn get_completions(&self) -> core::GetCompletionsResult {
+        core::GetCompletionsResult(self.completions.clone(), true)
     }
 
     fn can_descend(&self, completion: &core::Completion) -> bool {

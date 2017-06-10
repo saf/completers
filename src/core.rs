@@ -36,13 +36,28 @@ pub trait Completion : any::Any {
 /// to the UI.
 pub type Completions = Vec<Rc<Completion>>;
 
+/// The type returned from Completer::get_completions; this contains a
+/// collection of completions fetched so far and a boolean indicating
+/// whether fetching completions is finished; a `true` value indicates
+/// that there will be no more completions.
+pub struct GetCompletionsResult(pub Completions, pub bool);
+
 /// A trait for types which provide completions.
 ///
 /// complete-rs can support multiple completion providers and switch
 /// between them in run-time.
 pub trait Completer {
-    /// Returns the completions provided by this completer.
-    fn completions(&self) -> Completions;
+    /// Returns the completions provided by this completer and a
+    /// boolean indicating whether fetching the completions is
+    /// finished.
+    ///
+    /// This return format allows completers to return some
+    /// completions sooner than others if fetching all of the data
+    /// used for completions is a lengthy process.
+    ///
+    /// Completers should only return those completions which have not
+    /// been returned in previous calls to this method.
+    fn get_completions(&self) -> GetCompletionsResult;
 
     /// Indicates if the completer can 'descend' into the given completion.
     ///
