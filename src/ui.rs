@@ -101,7 +101,7 @@ struct ViewState {
 }
 
 impl ViewState {
-    pub fn new(completer: &core::Completer) -> ViewState {
+    pub fn new(completer: &mut core::Completer) -> ViewState {
         ViewState {
             levels_stack: vec![LevelViewState::new(completer.get_completions())],
         }
@@ -159,7 +159,7 @@ impl ViewState {
         self.top().query().clone()
     }
 
-    fn descend(&mut self, completer: &core::Completer) {
+    fn descend(&mut self, completer: &mut core::Completer) {
         self.levels_stack.push(LevelViewState::new(completer.get_completions()));
     }
 
@@ -171,7 +171,7 @@ impl ViewState {
         self.levels_stack.pop();
     }
 
-    fn switch_base(&mut self, completer: &core::Completer) {
+    fn switch_base(&mut self, completer: &mut core::Completer) {
         self.levels_stack[0] = LevelViewState::new(completer.get_completions());
     }
 }

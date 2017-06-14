@@ -2,7 +2,7 @@
 //! completions and completion providers (aka Completers).
 
 use std::any;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// A trait representing a single completion.
 ///
@@ -34,7 +34,7 @@ pub trait Completion : any::Any {
 
 /// The type of collections of completions passed from the completers
 /// to the UI.
-pub type Completions = Vec<Rc<Completion>>;
+pub type Completions = Vec<Arc<Completion + Send + Sync>>;
 
 /// The type returned from Completer::get_completions; this contains a
 /// collection of completions fetched so far and a boolean indicating
@@ -57,7 +57,7 @@ pub trait Completer {
     ///
     /// Completers should only return those completions which have not
     /// been returned in previous calls to this method.
-    fn get_completions(&self) -> GetCompletionsResult;
+    fn get_completions(&mut self) -> GetCompletionsResult;
 
     /// Indicates if the completer can 'descend' into the given completion.
     ///

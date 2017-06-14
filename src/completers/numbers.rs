@@ -2,7 +2,7 @@
 //! completers API.
 
 use std::any;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use core;
 
@@ -29,9 +29,9 @@ impl NumCompleter {
 }
 
 impl core::Completer for NumCompleter {
-    fn get_completions(&self) -> core::GetCompletionsResult {
+    fn get_completions(&mut self) -> core::GetCompletionsResult {
         let mut completions: core::Completions = vec![];
-        for rc in (0..self.count).map(|n| format!("{}", n)).map(|s| Rc::new(NumCompletion(s))) {
+        for rc in (0..self.count).map(|n| format!("{}", n)).map(|s| Arc::new(NumCompletion(s))) {
             completions.push(rc);
         }
         core::GetCompletionsResult(completions, true)
