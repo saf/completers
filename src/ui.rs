@@ -18,16 +18,19 @@ const CHOOSER_HEIGHT: usize = 10;
 const WORD_BOUNDARIES: &'static [char] = &[' ', '(', ')', ':', '`'];
 
 struct LevelViewState {
-    propositions: core::Completions,
+    completions: core::Completions,
+    fetching_done: bool,
     view_offset: usize,
     selection: usize,
     query: String,
 }
 
 impl LevelViewState {
-    pub fn new(propositions: core::Completions) -> LevelViewState {
+    pub fn new(completions_result: core::GetCompletionsResult) -> LevelViewState {
+        let core::GetCompletionsResult(completions, fetching_done) = completions_result;
         LevelViewState {
-            propositions: propositions,
+            completions: completions,
+            fetching_done: fetching_done,
             view_offset: 0,
             selection: 0,
             query: "".to_string(),
@@ -35,7 +38,7 @@ impl LevelViewState {
     }
 
     fn selected_completion(&self) -> &core::Completion {
-        &*self.propositions[self.selection]
+        &*self.completions[self.selection]
     }
 
     pub fn select_previous(&mut self) {
@@ -46,7 +49,7 @@ impl LevelViewState {
     }
 
     pub fn select_next(&mut self) {
-        self.selection = cmp::min(self.selection + 1, self.propositions.len() - 1);
+        self.selection = cmp::min(self.selection + 1, self.completions.len() - 1);
         if self.selection >= self.view_offset + CHOOSER_HEIGHT {
             self.view_offset = self.view_offset + 1;
         }
@@ -60,7 +63,7 @@ impl LevelViewState {
     }
 
     pub fn next_page(&mut self) {
-        self.selection = cmp::min(self.selection + CHOOSER_HEIGHT, self.propositions.len() - 1);
+        self.selection = cmp::min(self.selection + CHOOSER_HEIGHT, self.completions.len() - 1);
         if self.selection >= self.view_offset + CHOOSER_HEIGHT {
             self.view_offset = self.selection.saturating_sub(CHOOSER_HEIGHT - 1);
         }
@@ -72,7 +75,7 @@ impl LevelViewState {
     }
     
     pub fn select_last(&mut self) {
-        self.selection = self.propositions.len() - 1;
+        self.selection = self.completions.len() - 1;
         self.view_offset = self.selection.saturating_sub(CHOOSER_HEIGHT - 1);
     }
 
@@ -91,6 +94,14 @@ impl LevelViewState {
     pub fn query(&self) -> String {
         self.query.clone()
     }
+
+    pub fn refresh(&mut self, completer: &mut core::Completer) {
+        if !self.fetching_done {
+            let core::GetCompletionsResult(new_completions, is_finished) = completer.get_completions();
+            self.completions.extend(new_completions);
+            self.fetching_done = is_finished;
+        }
+    }
 }
 
 struct ViewState {
@@ -98,14 +109,18 @@ struct ViewState {
 }
 
 impl ViewState {
-    pub fn new(completer: &core::Completer) -> ViewState {
+    pub fn new(completer: &mut core::Completer) -> ViewState {
         ViewState {
-            levels_stack: vec![LevelViewState::new(completer.completions())],
+            levels_stack: vec![LevelViewState::new(completer.get_completions())],
         }
     }
 
     pub fn top(&self) -> &LevelViewState {
         self.levels_stack.last().unwrap()
+    }
+
+    pub fn top_mut(&mut self) -> &mut LevelViewState {
+        self.levels_stack.last_mut().unwrap()
     }
 
     fn selected_completion(&self) -> &core::Completion {
@@ -156,8 +171,8 @@ impl ViewState {
         self.top().query().clone()
     }
 
-    fn descend(&mut self, completer: &core::Completer) {
-        self.levels_stack.push(LevelViewState::new(completer.completions()));
+    fn descend(&mut self, completer: &mut core::Completer) {
+        self.levels_stack.push(LevelViewState::new(completer.get_completions()));
     }
 
     fn is_descended(&self) -> bool {
@@ -168,8 +183,12 @@ impl ViewState {
         self.levels_stack.pop();
     }
 
-    fn switch_base(&mut self, completer: &core::Completer) {
-        self.levels_stack[0] = LevelViewState::new(completer.completions());
+    fn switch_base(&mut self, completer: &mut core::Completer) {
+        self.levels_stack[0] = LevelViewState::new(completer.get_completions());
+    }
+
+    pub fn refresh(&mut self, completer: &mut core::Completer) {
+        self.top_mut().refresh(completer);
     }
 }
 
@@ -183,8 +202,8 @@ fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
              clear::CurrentLine, prompt, state.query, status_string,
              sw = term_cols - prompt.len() - state.query.len())?;
 
-    let end_offset = cmp::min(off + CHOOSER_HEIGHT, state.propositions.len());
-    for (i, p) in state.propositions[off .. end_offset].iter().enumerate() {
+    let end_offset = cmp::min(off + CHOOSER_HEIGHT, state.completions.len());
+    for (i, p) in state.completions[off .. end_offset].iter().enumerate() {
         if off + i == state.selection {
             writeln!(term, "{}{}{}{}{}{}",
                      clear::CurrentLine, Bg(Black), Fg(White), p.display_string(),
@@ -267,6 +286,7 @@ pub fn get_completion(mut line: String, completer: &mut core::Completer)
 
             _ => {},
         }
+        state.refresh(completer);
         print_state(&mut term, state.top())?;
     }
 
