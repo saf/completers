@@ -18,19 +18,16 @@ const CHOOSER_HEIGHT: usize = 10;
 const WORD_BOUNDARIES: &'static [char] = &[' ', '(', ')', ':', '`'];
 
 struct LevelViewState {
-    completions: core::Completions,
-    fetching_done: bool,
+    completer: Box<core::Completer>,
     view_offset: usize,
     selection: usize,
     query: String,
 }
 
 impl LevelViewState {
-    pub fn new(completions_result: core::GetCompletionsResult) -> LevelViewState {
-        let core::GetCompletionsResult(completions, fetching_done) = completions_result;
+    pub fn new(completer: Box<core::Completer>) -> LevelViewState {
         LevelViewState {
-            completions: completions,
-            fetching_done: fetching_done,
+            completer: completer,
             view_offset: 0,
             selection: 0,
             query: "".to_string(),
@@ -38,7 +35,8 @@ impl LevelViewState {
     }
 
     fn selected_completion(&self) -> &core::Completion {
-        &*self.completions[self.selection]
+        let completions = self.completer.completions();
+        &*completions[self.selection]
     }
 
     pub fn select_previous(&mut self) {
@@ -49,7 +47,8 @@ impl LevelViewState {
     }
 
     pub fn select_next(&mut self) {
-        self.selection = cmp::min(self.selection + 1, self.completions.len() - 1);
+        let completions_count = self.completer.completions().len();
+        self.selection = cmp::min(self.selection + 1, completions_count.saturating_sub(1));
         if self.selection >= self.view_offset + CHOOSER_HEIGHT {
             self.view_offset = self.view_offset + 1;
         }
@@ -63,7 +62,8 @@ impl LevelViewState {
     }
 
     pub fn next_page(&mut self) {
-        self.selection = cmp::min(self.selection + CHOOSER_HEIGHT, self.completions.len() - 1);
+        let completions_count = self.completer.completions().len();
+        self.selection = cmp::min(self.selection + CHOOSER_HEIGHT, completions_count - 1);
         if self.selection >= self.view_offset + CHOOSER_HEIGHT {
             self.view_offset = self.selection.saturating_sub(CHOOSER_HEIGHT - 1);
         }
@@ -75,7 +75,8 @@ impl LevelViewState {
     }
     
     pub fn select_last(&mut self) {
-        self.selection = self.completions.len() - 1;
+        let completions_count = self.completer.completions().len();
+        self.selection = completions_count - 1;
         self.view_offset = self.selection.saturating_sub(CHOOSER_HEIGHT - 1);
     }
 
@@ -94,14 +95,6 @@ impl LevelViewState {
     pub fn query(&self) -> String {
         self.query.clone()
     }
-
-    pub fn refresh(&mut self, completer: &mut core::Completer) {
-        if !self.fetching_done {
-            let core::GetCompletionsResult(new_completions, is_finished) = completer.get_completions();
-            self.completions.extend(new_completions);
-            self.fetching_done = is_finished;
-        }
-    }
 }
 
 struct ViewState {
@@ -109,9 +102,9 @@ struct ViewState {
 }
 
 impl ViewState {
-    pub fn new(completer: &mut core::Completer) -> ViewState {
+    pub fn new(completer: Box<core::Completer>) -> ViewState {
         ViewState {
-            levels_stack: vec![LevelViewState::new(completer.get_completions())],
+            levels_stack: vec![LevelViewState::new(completer)],
         }
     }
 
@@ -123,12 +116,8 @@ impl ViewState {
         self.levels_stack.last_mut().unwrap()
     }
 
-    fn selected_completion(&self) -> &core::Completion {
-        self.top().selected_completion()
-    }
-
-    pub fn get_selected_result(&self) -> String {
-        self.top().selected_completion().result_string()
+    pub fn get_selected_result(&mut self) -> String {
+        self.top_mut().selected_completion().result_string()
     }
 
     pub fn select_previous(&mut self) {
@@ -156,11 +145,11 @@ impl ViewState {
     }
 
     pub fn query_backspace(&mut self) {
-        self.levels_stack.last_mut().unwrap().query.pop();
+        self.levels_stack.last_mut().unwrap().query_backspace();
     }
 
     pub fn query_append(&mut self, ch: char) {
-        self.levels_stack.last_mut().unwrap().query.push(ch);
+        self.levels_stack.last_mut().unwrap().query_append(ch);
     }
 
     pub fn query_set(&mut self, query: &str) {
@@ -171,24 +160,21 @@ impl ViewState {
         self.top().query().clone()
     }
 
-    fn descend(&mut self, completer: &mut core::Completer) {
-        self.levels_stack.push(LevelViewState::new(completer.get_completions()));
-    }
-
-    fn is_descended(&self) -> bool {
-        self.levels_stack.len() > 1
+    fn descend(&mut self) {
+        let new_completer_or_nothing = self.top().completer.descend(self.top().selected_completion());
+        if let Some(new_completer) = new_completer_or_nothing {
+            self.levels_stack.push(LevelViewState::new(new_completer));
+        }
     }
 
     fn ascend(&mut self) {
-        self.levels_stack.pop();
-    }
-
-    fn switch_base(&mut self, completer: &mut core::Completer) {
-        self.levels_stack[0] = LevelViewState::new(completer.get_completions());
-    }
-
-    pub fn refresh(&mut self, completer: &mut core::Completer) {
-        self.top_mut().refresh(completer);
+        if self.levels_stack.len() == 1 {
+            if let Some(new_completer) = self.top().completer.ascend() {
+                self.levels_stack[0] = LevelViewState::new(new_completer);
+            }
+        } else {
+            self.levels_stack.pop();           
+        }
     }
 }
 
@@ -202,8 +188,9 @@ fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
              clear::CurrentLine, prompt, state.query, status_string,
              sw = term_cols - prompt.len() - state.query.len())?;
 
-    let end_offset = cmp::min(off + CHOOSER_HEIGHT, state.completions.len());
-    for (i, p) in state.completions[off .. end_offset].iter().enumerate() {
+    let completions = state.completer.completions();
+    let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
+    for (i, p) in completions[off .. end_offset].iter().enumerate() {
         if off + i == state.selection {
             writeln!(term, "{}{}{}{}{}{}",
                      clear::CurrentLine, Bg(Black), Fg(White), p.display_string(),
@@ -238,7 +225,7 @@ pub fn get_initial_query(line: &str) -> String {
     }
 }
 
-pub fn get_completion(mut line: String, completer: &mut core::Completer)
+pub fn get_completion(mut line: String, completer: Box<core::Completer>)
                       -> io::Result<(String, i16)> {
     let mut term = termion::get_tty()?;
     let mut state = ViewState::new(completer);
@@ -249,6 +236,7 @@ pub fn get_completion(mut line: String, completer: &mut core::Completer)
     let original_terminal_state = terminal::prepare()?;
     write!(term, "{}", termion::cursor::Right(30))?;
 
+    state.top_mut().completer.fetch_completions();
     print_state(&mut term, state.top()).unwrap();
 
     let mut result = String::new();
@@ -262,22 +250,8 @@ pub fn get_completion(mut line: String, completer: &mut core::Completer)
             Home       => state.select_first(),
             End        => state.select_last(),
 
-            Left       => {
-                if completer.can_ascend() {
-                    completer.ascend();
-                    if state.is_descended() {
-                        state.ascend();
-                    } else {
-                        state.switch_base(completer);
-                    }
-                }
-            }
-            Right      => {
-                if completer.can_descend(state.selected_completion()) {
-                    completer.descend(state.selected_completion());
-                    state.descend(completer);
-                }
-            }
+            Left       => state.ascend(),
+            Right      => state.descend(),
 
             Char('\n') => { result = state.get_selected_result(); break },
             Ctrl('c')  => { result = original_query.clone(); break },
@@ -286,7 +260,7 @@ pub fn get_completion(mut line: String, completer: &mut core::Completer)
 
             _ => {},
         }
-        state.refresh(completer);
+        state.top_mut().completer.fetch_completions();
         print_state(&mut term, state.top())?;
     }
 

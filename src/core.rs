@@ -2,14 +2,8 @@
 //! completions and completion providers (aka Completers).
 
 use std::any;
-use std::sync::Arc;
 
 /// A trait representing a single completion.
-///
-/// Completions can form a tree structure, with each completion having
-/// any number of child completions. This can model a file system
-/// hierarchy, for example, but it can also be adapted for other
-/// needs.
 ///
 /// A completion will usually show up in the completion window as the
 /// same text which is the result of the completion (i.e., the text
@@ -21,6 +15,9 @@ pub trait Completion : any::Any {
     fn result_string(&self) -> String;
 
     /// Returns the string to be shown in the selection UI.
+    ///
+    /// The default implementation is to show the same string as
+    /// `result_string`.
     fn display_string(&self) -> String {
         self.result_string()
     }
@@ -32,65 +29,78 @@ pub trait Completion : any::Any {
     fn as_any(&self) -> &any::Any;
 }
 
-/// The type of collections of completions passed from the completers
-/// to the UI.
-pub type Completions = Vec<Arc<Completion + Send + Sync>>;
-
-/// The type returned from Completer::get_completions; this contains a
-/// collection of completions fetched so far and a boolean indicating
-/// whether fetching completions is finished; a `true` value indicates
-/// that there will be no more completions.
-pub struct GetCompletionsResult(pub Completions, pub bool);
+/// The type of completion boxes returned from completers.
+///
+/// This type aims to make it easier for completers to store
+/// collections of completions internally and return them from the
+/// `completions` routine. An alternative design would be to have
+/// completers store the concrete completion types internally and
+/// returning references to them from `completions`, but that would
+/// require building separate collections of those references. With
+/// this type in place, completers can build their collections of
+/// completions as collections of boxes of `core::Completion` trait
+/// objects and return references to those collections from their
+/// `completions` methods.
+pub type CompletionBox = Box<Completion + Sync + Send>;
 
 /// A trait for types which provide completions.
 ///
 /// complete-rs can support multiple completion providers and switch
 /// between them in run-time.
 pub trait Completer {
-    /// Returns the completions provided by this completer and a
-    /// boolean indicating whether fetching the completions is
-    /// finished.
+    /// Returns the completions provided by this completer.
     ///
-    /// This return format allows completers to return some
-    /// completions sooner than others if fetching all of the data
-    /// used for completions is a lengthy process.
-    ///
-    /// Completers should only return those completions which have not
-    /// been returned in previous calls to this method.
-    fn get_completions(&mut self) -> GetCompletionsResult;
+    /// Completers are expected to store the collection of their
+    /// completions within their structure, and return a reference to
+    /// the relevant slice from this method.
+    fn completions(&self) -> &[CompletionBox];
 
-    /// Indicates if the completer can 'descend' into the given completion.
+    /// Indicates if fetching completions is finished.
     ///
-    /// Descending can be used to model a tree structure (e.g., a file
-    /// system) or any other hierarchical structure.
-    fn can_descend(&self, &Completion) -> bool {
-        false
+    /// A completer may return `false` from this method to indicate
+    /// that there may be more completions in the future. This is
+    /// useful if fetching all completions may take a long time.
+    fn fetching_completions_finished(&self) -> bool {
+        true
     }
 
-    /// Descends into the given completion.
+    /// Requests the completer to update its collection of completions.
     ///
-    /// This does not need to be implemented in any meaningful way if
-    /// the completer always returns `false` from `can_descend`; hence,
-    /// we provide a default implementation which does nothing.
-    fn descend(&mut self, &Completion) {}
+    /// The framework will call this until the completer returns `true`
+    /// from `fetching_completions_finished`.
+    ///
+    /// The default implementation is to do nothing; this is
+    /// appropriate for completers which generate all their
+    /// completions at once.
+    fn fetch_completions(&mut self) {}
 
-    /// Indicates if the completer can "ascend" from the current level.
+    /// Descends into the given completion if possible, yielding a new
+    /// completer. Returns None if descending is not possible for the
+    /// completion.
     ///
-    /// Ascending can be used to go back from a node we descended
-    /// into, but it can also model going up a hierarchical structure
-    /// from a point where the completer was first invoked, e.g.,
-    /// going to the parent of the current directory.
-    fn can_ascend(&self) -> bool {
-        false
+    /// A completer may return a new completer of the same type or
+    /// another type.
+    ///
+    /// The default implementation returns None for any completion,
+    /// which means that descending is not possible for any
+    /// completion.
+    fn descend(&self, &Completion) -> Option<Box<Completer>> {
+        None
     }
 
-    /// Ascends from the current state.
+    /// Ascends from the current state -- moves "up" in the
+    /// hierarchical structure.
     ///
-    /// We provide a default implementation which does nothing; it is
-    /// OK for completers which always return `false` from the
-    /// `can_ascend` method.
+    /// Ascending is only meaningful for completers which are not the
+    /// result of descending into a completion. If a completer is the
+    /// result of descending into a completion, the framework will
+    /// handle ascending from it by moving to the completer which
+    /// spawned that completion.
     ///
-    /// A reasonable completer will support ascending from states it
-    /// allows descending to.
-    fn ascend(&mut self) {}
+    /// A completer may return a new completer of the same or
+    /// different type than itself, or return None to indicate that
+    /// ascending from the current completer is not possible.
+    fn ascend(&self) -> Option<Box<Completer>> {
+        None
+    }
 }

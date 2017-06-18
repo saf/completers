@@ -2,7 +2,6 @@
 //! completers API.
 
 use std::any;
-use std::sync::Arc;
 
 use core;
 
@@ -19,21 +18,21 @@ impl core::Completion for NumCompletion {
 }
 
 pub struct NumCompleter {
-    count: usize,
+    completions: Vec<core::CompletionBox>,
 }
 
 impl NumCompleter {
     pub fn new(count: usize) -> NumCompleter {
-        NumCompleter { count: count }
+        let mut completions: Vec<core::CompletionBox> = vec![];
+        for b in (0..count).map(|n| format!("{}", n)).map(|s| Box::new(NumCompletion(s))) {
+            completions.push(b);
+        }
+        NumCompleter { completions: completions }
     }
 }
 
 impl core::Completer for NumCompleter {
-    fn get_completions(&mut self) -> core::GetCompletionsResult {
-        let mut completions: core::Completions = vec![];
-        for rc in (0..self.count).map(|n| format!("{}", n)).map(|s| Arc::new(NumCompletion(s))) {
-            completions.push(rc);
-        }
-        core::GetCompletionsResult(completions, true)
+    fn completions(&self) -> &[core::CompletionBox] {
+        &self.completions
     }
 }

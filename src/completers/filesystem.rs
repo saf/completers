@@ -5,7 +5,6 @@ use std::any;
 use std::collections::vec_deque::VecDeque;
 use std::fs;
 use std::path;
-use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
@@ -54,45 +53,21 @@ struct DirectoryQueueEntry(path::PathBuf, usize);
 
 /// A structure representing the background fetching thread.
 struct BgThread {
-    thread: thread::JoinHandle<()>,
-    request_send: mpsc::Sender<()>,
-    response_recv: mpsc::Receiver<core::GetCompletionsResult>,
+    pub thread: thread::JoinHandle<()>,
+    pub request_send: mpsc::Sender<()>,
+    pub response_recv: mpsc::Receiver<Option<Vec<core::CompletionBox>>>,
 }
 
-/// A structure representing the state of fetching completions for a
-/// single level (directory).
-///
-/// The user may descend into a directory when the completer is still
-/// fetching completions for the current directory. To avoid confusing
-/// the UI, we retain the state of fetching completions for the
-/// current directory before we actually descend into the chosen one.
-///
-/// The saved state consists of the collection of completions already
-/// passed to the UI, an indication whether fetching data was already
-/// finished, and an optional JoinHandle which is filled if fetching
-/// was not done.
-///
-/// This is needed because we may need to return to that level via
-/// ascend(), and we want to continue scanning directories exactly
-/// from where we stopped. Even if collecting completions was
-/// finished, we will have the completions ready for searching when we
-/// return to this level.
-struct FsCompleterLevelState {
-    pub dir_path: path::PathBuf,
-    pub all_completions: core::Completions,
-    pub fetching_thread: Option<BgThread>,
-}
-
-fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> core::Completions {
+fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> Vec<core::CompletionBox> {
     let queue_entry = queue.pop_front();
     if let None = queue_entry {
-        return core::Completions::new();
+        return vec![];
     }
     let DirectoryQueueEntry(dir_path, depth) = queue_entry.unwrap();
-    let mut completions = core::Completions::new();
+    let mut completions: Vec<core::CompletionBox> = vec![];
     let read_dir_result = fs::read_dir(&dir_path);
     if let Err(_) = read_dir_result {
-        return core::Completions::new();
+        return vec![];
     }
     let mut entries = read_dir_result.unwrap();
     while let Some(Ok(entry)) = entries.next() {
@@ -121,7 +96,7 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> core::Completions
             queue.push_back(DirectoryQueueEntry(path.clone(), depth + 1));
         }
 
-        completions.push(Arc::new(FsCompletion {
+        completions.push(Box::new(FsCompletion {
             relative_path: path,
             entry_type: entry_type,
         }));
@@ -131,17 +106,16 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> core::Completions
 }
 
 fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver<()>,
-                           response_send: mpsc::Sender<core::GetCompletionsResult>) {
+                           response_send: mpsc::Sender<Option<Vec<core::CompletionBox>>>) {
     let mut dir_queue: VecDeque<DirectoryQueueEntry> = VecDeque::new();
     dir_queue.push_back(DirectoryQueueEntry(dir_path, 0));
-    let mut completions = core::Completions::new();
+    let mut completions: Vec<core::CompletionBox> = Vec::new();
     while !dir_queue.is_empty() {
         completions.extend(directory_bfs(&mut dir_queue));
         match request_recv.try_recv() {
             Result::Ok(_) => {
-                let result = core::GetCompletionsResult(completions, false);
-                response_send.send(result).unwrap();
-                completions = core::Completions::new();
+                response_send.send(Some(completions)).unwrap();
+                completions = Vec::new();
             },
             Result::Err(mpsc::TryRecvError::Empty) => {},
             Result::Err(mpsc::TryRecvError::Disconnected) => {
@@ -151,8 +125,7 @@ fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver
     }
     match request_recv.recv() {
         Result::Ok(_) => {
-            let result = core::GetCompletionsResult(completions, true);
-            response_send.send(result).unwrap();
+            response_send.send(None).unwrap();
         },
         Result::Err(_) => {
             return;
@@ -160,10 +133,34 @@ fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver
     }
 }
 
-impl FsCompleterLevelState {
-    fn new(dir_path: path::PathBuf) -> FsCompleterLevelState {
+/// A structure representing the state of fetching completions for a
+/// single level (directory).
+///
+/// The user may descend into a directory when the completer is still
+/// fetching completions for the current directory. To avoid confusing
+/// the UI, we retain the state of fetching completions for the
+/// current directory before we actually descend into the chosen one.
+///
+/// The saved state consists of the collection of completions already
+/// passed to the UI, an indication whether fetching data was already
+/// finished, and an optional JoinHandle which is filled if fetching
+/// was not done.
+///
+/// This is needed because we may need to return to that level via
+/// ascend(), and we want to continue scanning directories exactly
+/// from where we stopped. Even if collecting completions was
+/// finished, we will have the completions ready for searching when we
+/// return to this level.
+pub struct FsCompleter {
+    pub dir_path: path::PathBuf,
+    pub all_completions: Vec<core::CompletionBox>,
+    fetching_thread: Option<BgThread>,
+}
+
+impl FsCompleter {
+    pub fn new(dir_path: path::PathBuf) -> FsCompleter {
         let (request_send, request_recv) = mpsc::channel::<()>();
-        let (response_send, response_recv) = mpsc::channel::<core::GetCompletionsResult>();
+        let (response_send, response_recv) = mpsc::channel::<Option<Vec<core::CompletionBox>>>();
         let dir_path_clone = dir_path.clone();
         let thread = thread::spawn(
             move || fetching_thread_routine(dir_path_clone, request_recv, response_send)
@@ -174,86 +171,69 @@ impl FsCompleterLevelState {
             response_recv: response_recv,
         };
        
-        FsCompleterLevelState {
-            dir_path: dir_path,
-            all_completions: core::Completions::new(),
-            fetching_thread: Some(bg_thread),
-        }
-    }
-
-    fn get_completions(&mut self) -> core::GetCompletionsResult {
-        let bg_thread = self.fetching_thread.take();
-        if let Some(t) = bg_thread {
-            t.request_send.send(()).unwrap();
-            let completions_result = t.response_recv.recv().unwrap();
-            {
-                let core::GetCompletionsResult(ref completions, is_finished) = completions_result;
-                self.all_completions.extend(completions.clone());
-                if is_finished {
-                    t.thread.join().unwrap();
-                } else {
-                    // We have 'taken' bg_thread out of the structure, but it turns
-                    // out we have to restore it.
-                    self.fetching_thread = Some(t)
-                }
-            }
-            completions_result
-        } else {
-            core::GetCompletionsResult(vec![], true)
-        }
-    }
-}
-
-pub struct FsCompleter {
-    level_states: Vec<FsCompleterLevelState>,
-}
-
-impl FsCompleter {
-    pub fn new() -> FsCompleter {
-        let level_state = FsCompleterLevelState::new(path::PathBuf::from("."));
         FsCompleter {
-            level_states: vec![level_state],
+            dir_path: dir_path,
+            all_completions: vec![],
+            fetching_thread: Some(bg_thread),
         }
     }
 }
 
 impl core::Completer for FsCompleter {
-    fn get_completions(&mut self) -> core::GetCompletionsResult {
-        self.level_states.last_mut().unwrap().get_completions()
+    fn completions(&self) -> &[core::CompletionBox] {
+        &self.all_completions
     }
 
-    fn can_descend(&self, completion: &core::Completion) -> bool {
-        let completion_any = completion.as_any();
-        match completion_any.downcast_ref::<FsCompletion>() {
-            Some(&FsCompletion { entry_type: FsEntryType::Directory, .. }) => true,
-            _ => false
+    fn fetching_completions_finished(&self) -> bool {
+        match self.fetching_thread {
+            Some(_) => false,
+            None    => true,
         }
     }
 
-    fn descend(&mut self, completion: &core::Completion) {
+    fn fetch_completions(&mut self) {
+        let bg_thread = self.fetching_thread.take();
+        if let Some(t) = bg_thread {
+            t.request_send.send(()).unwrap();
+            let new_completions = t.response_recv.recv().unwrap();
+            match new_completions {
+                Some(completions) => {
+                    self.all_completions.extend(completions);
+                    // We have 'taken' bg_thread out of the structure, but it turns
+                    // out we have to restore it.
+                    self.fetching_thread = Some(t);
+                },
+                None => {
+                    t.thread.join().unwrap();
+                }
+            }
+        }
+    }
+
+    fn descend(&self, completion: &core::Completion) -> Option<Box<core::Completer>> {
         let completion_any = completion.as_any();
         let fs_completion = completion_any.downcast_ref::<FsCompletion>().unwrap();
-        let descend_dir = fs_completion.relative_path.file_name().unwrap();
-        let new_path = self.level_states.last().unwrap().dir_path.join(descend_dir);
-        self.level_states.push(FsCompleterLevelState::new(new_path));
+        match fs_completion.entry_type {
+            FsEntryType::Directory => {
+                let new_path = self.dir_path.join(fs_completion.relative_path.file_name().unwrap());
+                Some(Box::new(FsCompleter::new(new_path)))
+            },
+            _ => None,
+        }
     }
 
-    fn can_ascend(&self) -> bool {
-        self.level_states.last().unwrap().dir_path != path::Path::new("/")
-    }
-
-    fn ascend(&mut self) {
-        let current_path = self.level_states.last().unwrap().dir_path.clone();
+    fn ascend(&self) -> Option<Box<core::Completer>> {
+        let current_path = self.dir_path.clone();
         if current_path.ends_with(path::Path::new(".")) {
-            self.level_states[0] = FsCompleterLevelState::new(path::PathBuf::from(".."));
+            Some(Box::new(FsCompleter::new(path::PathBuf::from(".."))))
         } else if current_path.ends_with(path::Path::new("..")) {
             let mut new_path = current_path.join(path::Path::new(".."));
             if new_path.canonicalize().unwrap() == path::Path::new("/") {
                 new_path = path::PathBuf::from("/");
             }
-            self.level_states[0] = FsCompleterLevelState::new(new_path);
+            Some(Box::new(FsCompleter::new(new_path)))
         } else {
-            self.level_states.pop();
+            None
         }
     }
 }

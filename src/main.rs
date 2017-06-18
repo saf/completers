@@ -4,14 +4,15 @@ extern crate completers;
 
 use std::io;
 use std::io::Write;
+use std::path;
 
 use completers::completers::filesystem;
 use completers::ui;
 
 
 fn complete(line: String) -> io::Result<(String, i16)> {
-    let mut completer = filesystem::FsCompleter::new();
-    return ui::get_completion(line, &mut completer);
+    let completer = Box::new(filesystem::FsCompleter::new(path::PathBuf::from(".")));
+    return ui::get_completion(line, completer);
 }
 
 fn main() {
