@@ -260,7 +260,9 @@ pub fn get_completion(mut line: String, completer: Box<core::Completer>)
 
             _ => {},
         }
-        state.top_mut().completer.fetch_completions();
+        if !state.top().completer.fetching_completions_finished() {
+            state.top_mut().completer.fetch_completions();
+        }
         print_state(&mut term, state.top())?;
     }
 

@@ -125,6 +125,14 @@ fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver
     }
     match request_recv.recv() {
         Result::Ok(_) => {
+            response_send.send(Some(completions)).unwrap();
+        }
+        _ => {
+            return;
+        }
+    }
+    match request_recv.recv() {
+        Result::Ok(_) => {
             response_send.send(None).unwrap();
         },
         Result::Err(_) => {
