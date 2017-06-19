@@ -2,6 +2,9 @@ use std::cmp;
 use std::fs::File;
 use std::io;
 use std::io::Write;
+use std::sync::mpsc;
+use std::time;
+use std::thread;
 
 use termion;
 use termion::clear;
@@ -73,7 +76,7 @@ impl LevelViewState {
         self.selection = 0;
         self.view_offset = 0;
     }
-    
+
     pub fn select_last(&mut self) {
         let completions_count = self.completer.completions().len();
         self.selection = completions_count - 1;
@@ -162,18 +165,20 @@ impl ViewState {
 
     fn descend(&mut self) {
         let new_completer_or_nothing = self.top().completer.descend(self.top().selected_completion());
-        if let Some(new_completer) = new_completer_or_nothing {
+        if let Some(mut new_completer) = new_completer_or_nothing {
+            new_completer.fetch_completions();
             self.levels_stack.push(LevelViewState::new(new_completer));
         }
     }
 
     fn ascend(&mut self) {
         if self.levels_stack.len() == 1 {
-            if let Some(new_completer) = self.top().completer.ascend() {
+            if let Some(mut new_completer) = self.top().completer.ascend() {
+                new_completer.fetch_completions();
                 self.levels_stack[0] = LevelViewState::new(new_completer);
             }
         } else {
-            self.levels_stack.pop();           
+            self.levels_stack.pop();
         }
     }
 }
@@ -181,14 +186,16 @@ impl ViewState {
 fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
     let off = state.view_offset;
     let prompt = "  Search: ";
-    let status_string = format!("STATUS {:?} {:?} ql {:?}", off, state.selection, state.query.len());
+    let completions = state.completer.completions();
+    let status_string = format!("[{}-{}/{}]", off + 1,
+                                cmp::min(off + CHOOSER_HEIGHT + 1, completions.len()),
+                                completions.len());
     let term_cols = 80 as usize;
 
     writeln!(term, "{}{}{}{}{:>sw$}", termion::cursor::Left(100),
              clear::CurrentLine, prompt, state.query, status_string,
              sw = term_cols - prompt.len() - state.query.len())?;
 
-    let completions = state.completer.completions();
     let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
     for (i, p) in completions[off .. end_offset].iter().enumerate() {
         if off + i == state.selection {
@@ -199,7 +206,7 @@ fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
             writeln!(term, "{}{}", clear::CurrentLine, p.display_string())?;
         }
     }
-    
+
     for _ in end_offset .. off + CHOOSER_HEIGHT {
         writeln!(term, "{}", clear::CurrentLine)?;
     }
@@ -225,6 +232,21 @@ pub fn get_initial_query(line: &str) -> String {
     }
 }
 
+fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
+                             key_sender: mpsc::Sender<termion::event::Key>) {
+    let mut keys = io::stdin().keys();
+    while let Result::Ok(()) = req_receiver.recv() {
+        if let Some(Result::Ok(key)) = keys.next() {
+            let result = key_sender.send(key);
+            if result.is_err() {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+}
+
 pub fn get_completion(mut line: String, completer: Box<core::Completer>)
                       -> io::Result<(String, i16)> {
     let mut term = termion::get_tty()?;
@@ -239,32 +261,50 @@ pub fn get_completion(mut line: String, completer: Box<core::Completer>)
     state.top_mut().completer.fetch_completions();
     print_state(&mut term, state.top()).unwrap();
 
-    let mut result = String::new();
+    let result;
 
-    for key_result in io::stdin().keys() {
-        match key_result.unwrap() {
-            Up         => state.select_previous(),
-            Down       => state.select_next(),
-            PageUp     => state.previous_page(),
-            PageDown   => state.next_page(),
-            Home       => state.select_first(),
-            End        => state.select_last(),
+    let (key_sender, key_receiver) = mpsc::channel::<termion::event::Key>();
+    let (req_sender, req_receiver) = mpsc::channel::<()>();
+    let key_reader_thread = thread::spawn(move || key_reader_thread_routine(req_receiver, key_sender));
+    let mut req_sender = Some(req_sender);
 
-            Left       => state.ascend(),
-            Right      => state.descend(),
-
-            Char('\n') => { result = state.get_selected_result(); break },
-            Ctrl('c')  => { result = original_query.clone(); break },
-            Char(c)    => state.query_append(c),
-            Backspace  => state.query_backspace(),
-
-            _ => {},
-        }
+    req_sender.as_ref().unwrap().send(()).unwrap();
+    loop {
+        let key_or_nothing;
         if !state.top().completer.fetching_completions_finished() {
+            key_or_nothing = key_receiver.recv_timeout(time::Duration::from_millis(10)).ok();
             state.top_mut().completer.fetch_completions();
+        } else {
+            key_or_nothing = key_receiver.recv().ok();
+        }
+
+        if let Some(key) = key_or_nothing {
+            match key {
+                Up         => state.select_previous(),
+                Down       => state.select_next(),
+                PageUp     => state.previous_page(),
+                PageDown   => state.next_page(),
+                Home       => state.select_first(),
+                End        => state.select_last(),
+
+                Left       => state.ascend(),
+                Right      => state.descend(),
+
+                Char('\n') => { result = state.get_selected_result(); break },
+                Ctrl('c')  => { result = original_query.clone(); break },
+                Char(c)    => state.query_append(c),
+                Backspace  => state.query_backspace(),
+
+                _ => {},
+            };
+            // We are going to loop again, so we send a request to get another input key.
+            req_sender.as_ref().unwrap().send(()).unwrap();
         }
         print_state(&mut term, state.top())?;
     }
+
+    req_sender.take();
+    key_reader_thread.join().unwrap();
 
     clear()?;
     terminal::restore(original_terminal_state)?;
