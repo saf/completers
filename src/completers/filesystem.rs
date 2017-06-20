@@ -5,12 +5,14 @@ use std::any;
 use std::collections::vec_deque::VecDeque;
 use std::fs;
 use std::path;
+use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
 use termion::color;
 
 use core;
+use core::Completion;
 
 const DIRECTORY_DEPTH_LIMIT: usize = 4;
 
@@ -96,12 +98,12 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> Vec<core::Complet
             queue.push_back(DirectoryQueueEntry(path.clone(), depth + 1));
         }
 
-        completions.push(Box::new(FsCompletion {
+        completions.push(Arc::new(FsCompletion {
             relative_path: path,
             entry_type: entry_type,
         }));
     }
-    completions.sort_by_key(|b| b.result_string());
+    completions.sort_by_key(|c| c.result_string());
     completions
 }
 
@@ -109,7 +111,7 @@ fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver
                            response_send: mpsc::Sender<Option<Vec<core::CompletionBox>>>) {
     let mut dir_queue: VecDeque<DirectoryQueueEntry> = VecDeque::new();
     dir_queue.push_back(DirectoryQueueEntry(dir_path, 0));
-    let mut completions: Vec<core::CompletionBox> = Vec::new();
+    let mut completions = Vec::new();
     while !dir_queue.is_empty() {
         completions.extend(directory_bfs(&mut dir_queue));
         match request_recv.try_recv() {
@@ -160,8 +162,10 @@ fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver
 /// finished, we will have the completions ready for searching when we
 /// return to this level.
 pub struct FsCompleter {
-    pub dir_path: path::PathBuf,
-    pub all_completions: Vec<core::CompletionBox>,
+    dir_path: path::PathBuf,
+    all_completions: Vec<core::CompletionBox>,
+    filtered_completions: Vec<core::CompletionBox>,
+    query: String,
     fetching_thread: Option<BgThread>,
 }
 
@@ -182,14 +186,26 @@ impl FsCompleter {
         FsCompleter {
             dir_path: dir_path,
             all_completions: vec![],
+            filtered_completions: vec![],
+            query: String::new(),
             fetching_thread: Some(bg_thread),
         }
+    }
+
+    fn filter_completions(&self, completions: &[core::CompletionBox]) -> Vec<core::CompletionBox> {
+        let mut result = Vec::new();
+        for completion_arc in completions {
+            if completion_arc.result_string().contains(&self.query) {
+                result.push(completion_arc.clone());
+            }
+        }
+        result
     }
 }
 
 impl core::Completer for FsCompleter {
     fn completions(&self) -> &[core::CompletionBox] {
-        &self.all_completions
+        self.filtered_completions.as_slice()
     }
 
     fn fetching_completions_finished(&self) -> bool {
@@ -206,6 +222,8 @@ impl core::Completer for FsCompleter {
             let new_completions = t.response_recv.recv().unwrap();
             match new_completions {
                 Some(completions) => {
+                    let filtered_completions = self.filter_completions(&completions);
+                    self.filtered_completions.extend(filtered_completions);
                     self.all_completions.extend(completions);
                     // We have 'taken' bg_thread out of the structure, but it turns
                     // out we have to restore it.
@@ -216,6 +234,11 @@ impl core::Completer for FsCompleter {
                 }
             }
         }
+    }
+
+    fn set_query(&mut self, query: String) {
+        self.query = query;
+        self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
     }
 
     fn descend(&self, completion: &core::Completion) -> Option<Box<core::Completer>> {

@@ -83,16 +83,23 @@ impl LevelViewState {
         self.view_offset = self.selection.saturating_sub(CHOOSER_HEIGHT - 1);
     }
 
+    fn update_query(&mut self) {
+        self.completer.set_query(self.query.clone());
+    }
+
     pub fn query_backspace(&mut self) {
         self.query.pop();
+        self.update_query()
     }
 
     pub fn query_append(&mut self, ch: char) {
         self.query.push(ch);
+        self.update_query()
     }
 
     pub fn query_set(&mut self, query: &str) {
         self.query = query.to_string();
+        self.update_query()
     }
 
     pub fn query(&self) -> String {

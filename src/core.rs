@@ -2,6 +2,7 @@
 //! completions and completion providers (aka Completers).
 
 use std::any;
+use std::sync::Arc;
 
 /// A trait representing a single completion.
 ///
@@ -29,7 +30,7 @@ pub trait Completion : any::Any {
     fn as_any(&self) -> &any::Any;
 }
 
-/// The type of completion boxes returned from completers.
+/// The type of completions returned from completers.
 ///
 /// This type aims to make it easier for completers to store
 /// collections of completions internally and return them from the
@@ -38,10 +39,10 @@ pub trait Completion : any::Any {
 /// returning references to them from `completions`, but that would
 /// require building separate collections of those references. With
 /// this type in place, completers can build their collections of
-/// completions as collections of boxes of `core::Completion` trait
+/// completions as collections of Arcs to `core::Completion` trait
 /// objects and return references to those collections from their
 /// `completions` methods.
-pub type CompletionBox = Box<Completion + Sync + Send>;
+pub type CompletionBox = Arc<Completion + Sync + Send>;
 
 /// A trait for types which provide completions.
 ///
@@ -73,6 +74,9 @@ pub trait Completer {
     /// appropriate for completers which generate all their
     /// completions at once.
     fn fetch_completions(&mut self) {}
+
+    /// Sets the search query for the completer.
+    fn set_query(&mut self, query: String);
 
     /// Descends into the given completion if possible, yielding a new
     /// completer. Returns None if descending is not possible for the
