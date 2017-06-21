@@ -1,4 +1,4 @@
-extern crate ctrlc;
+extern crate libc;
 extern crate termion;
 extern crate termios;
 

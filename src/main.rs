@@ -1,5 +1,4 @@
 extern crate clap;
-extern crate ctrlc;
 extern crate completers;
 
 use std::io;

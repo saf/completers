@@ -197,7 +197,7 @@ fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
     let status_string = format!("[{}-{}/{}]", off + 1,
                                 cmp::min(off + CHOOSER_HEIGHT + 1, completions.len()),
                                 completions.len());
-    let term_cols = 80 as usize;
+    let term_cols = terminal::get_width(term).unwrap() as usize;
 
     writeln!(term, "{}{}{}{}{:>sw$}", termion::cursor::Left(100),
              clear::CurrentLine, prompt, state.query, status_string,
