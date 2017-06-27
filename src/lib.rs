@@ -1,3 +1,4 @@
+extern crate itertools;
 extern crate libc;
 extern crate termion;
 extern crate termios;
