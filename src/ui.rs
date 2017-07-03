@@ -133,43 +133,47 @@ impl ViewState {
     }
 
     pub fn select_previous(&mut self) {
-        self.levels_stack.last_mut().unwrap().select_previous();
+        self.top_mut().select_previous();
     }
 
     pub fn select_next(&mut self) {
-        self.levels_stack.last_mut().unwrap().select_next();
+        self.top_mut().select_next();
     }
 
     pub fn previous_page(&mut self) {
-        self.levels_stack.last_mut().unwrap().previous_page();
+        self.top_mut().previous_page();
     }
 
     pub fn next_page(&mut self) {
-        self.levels_stack.last_mut().unwrap().next_page();
+        self.top_mut().next_page();
     }
 
     pub fn select_first(&mut self) {
-        self.levels_stack.last_mut().unwrap().select_first();
+        self.top_mut().select_first();
     }
 
     pub fn select_last(&mut self) {
-        self.levels_stack.last_mut().unwrap().select_last();
+        self.top_mut().select_last();
     }
 
     pub fn query_backspace(&mut self) {
-        self.levels_stack.last_mut().unwrap().query_backspace();
+        self.top_mut().query_backspace();
     }
 
     pub fn query_append(&mut self, ch: char) {
-        self.levels_stack.last_mut().unwrap().query_append(ch);
+        self.top_mut().query_append(ch);
     }
 
     pub fn query_set(&mut self, query: &str) {
-        self.levels_stack.last_mut().unwrap().query_set(query);
+        self.top_mut().query_set(query);
     }
 
     pub fn query(&self) -> String {
-        self.top().query().clone()
+        self.top().query()
+    }
+
+    pub fn fetch_completions(&mut self) {
+        self.top_mut().completer.fetch_completions();
     }
 
     fn descend(&mut self) {
@@ -220,16 +224,70 @@ impl State {
         &mut self.tabs[self.selection]
     }
 
+    pub fn get_selected_result(&self) -> String {
+        self.current_tab().get_selected_result()
+    }
+
+    pub fn select_previous(&mut self) {
+        self.current_tab_mut().select_previous();
+    }
+
+    pub fn select_next(&mut self) {
+        self.current_tab_mut().select_next();
+    }
+
+    pub fn previous_page(&mut self) {
+        self.current_tab_mut().previous_page();
+    }
+
+    pub fn next_page(&mut self) {
+        self.current_tab_mut().next_page();
+    }
+
+    pub fn select_first(&mut self) {
+        self.current_tab_mut().select_first();
+    }
+
+    pub fn select_last(&mut self) {
+        self.current_tab_mut().select_last();
+    }
+
+    pub fn query_backspace(&mut self) {
+        self.current_tab_mut().query_backspace();
+    }
+
+    pub fn query_append(&mut self, ch: char) {
+        self.current_tab_mut().query_append(ch);
+    }
+
+    pub fn query_set(&mut self, query: &str) {
+        self.current_tab_mut().query_set(query);
+    }
+
+    pub fn query(&self) -> String {
+        self.current_tab().query().clone()
+    }
+
+    pub fn descend(&mut self) {
+        self.current_tab_mut().descend()
+    }
+
+    pub fn ascend(&mut self) {
+        self.current_tab_mut().ascend()
+    }
+
     fn next_tab(&mut self) {
         self.selection = (self.selection + 1) % self.tabs.len();
     }
 
-    fn prev_tab(&mut self) {
-        self.selection = if self.selection == 0 {
-            self.tabs.len() - 1
-        } else {
-            self.selection - 1
+    fn start_fetching_completions(&mut self) {
+        for t in &mut self.tabs {
+            t.fetch_completions();
         }
+    }
+
+    fn fetch_completions(&mut self) {
+        self.current_tab_mut().fetch_completions();
     }
 }
 
@@ -245,7 +303,7 @@ fn print_state(term: &mut File, state: &State) -> io::Result<()> {
     let term_cols = terminal::get_width(term).unwrap() as usize;
 
     writeln!(term, "{}{}{}{}{:>sw$}", termion::cursor::Left(100),
-             clear::CurrentLine, prompt, level_state.query, status_string,
+             clear::CurrentLine, prompt, state.query(), status_string,
              sw = term_cols - prompt.len() - level_state.query.len())?;
 
     let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
@@ -310,9 +368,7 @@ pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
     let original_terminal_state = terminal::prepare()?;
     write!(term, "{}", termion::cursor::Right(30))?;
 
-    for t in &mut state.tabs {
-        t.top_mut().completer.fetch_completions();
-    }
+    state.start_fetching_completions();
     print_state(&mut term, &state).unwrap();
 
     let result;
@@ -327,28 +383,28 @@ pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
         let key_or_nothing;
         if !state.current_tab().top().completer.fetching_completions_finished() {
             key_or_nothing = key_receiver.recv_timeout(time::Duration::from_millis(10)).ok();
-            state.current_tab_mut().top_mut().completer.fetch_completions();
+            state.fetch_completions();
         } else {
             key_or_nothing = key_receiver.recv().ok();
         }
 
         if let Some(key) = key_or_nothing {
             match key {
-                Up         => state.current_tab_mut().select_previous(),
-                Down       => state.current_tab_mut().select_next(),
-                PageUp     => state.current_tab_mut().previous_page(),
-                PageDown   => state.current_tab_mut().next_page(),
-                Home       => state.current_tab_mut().select_first(),
-                End        => state.current_tab_mut().select_last(),
+                Up         => state.select_previous(),
+                Down       => state.select_next(),
+                PageUp     => state.previous_page(),
+                PageDown   => state.next_page(),
+                Home       => state.select_first(),
+                End        => state.select_last(),
 
-                Left       => state.current_tab_mut().ascend(),
-                Right      => state.current_tab_mut().descend(),
+                Left       => state.ascend(),
+                Right      => state.descend(),
 
-                Char('\n') => { result = state.current_tab().get_selected_result(); break },
+                Char('\n') => { result = state.get_selected_result(); break },
                 Ctrl('c')  => { result = original_query.clone(); break },
                 Char('\t') => state.next_tab(),
-                Char(c)    => state.current_tab_mut().query_append(c),
-                Backspace  => state.current_tab_mut().query_backspace(),
+                Char(c)    => state.query_append(c),
+                Backspace  => state.query_backspace(),
 
                 _ => {},
             };
