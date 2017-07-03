@@ -84,6 +84,8 @@ impl LevelViewState {
     }
 
     fn update_query(&mut self) {
+        self.selection = 0;
+        self.view_offset = 0;
         self.completer.set_query(self.query.clone());
     }
 
