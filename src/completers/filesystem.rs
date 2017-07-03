@@ -204,6 +204,10 @@ impl FsCompleter {
 }
 
 impl core::Completer for FsCompleter {
+    fn name(&self) -> String {
+        "fs".to_owned()
+    }
+
     fn completions(&self) -> &[core::CompletionBox] {
         self.filtered_completions.as_slice()
     }

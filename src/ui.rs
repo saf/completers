@@ -126,8 +126,8 @@ impl ViewState {
         self.levels_stack.last_mut().unwrap()
     }
 
-    pub fn get_selected_result(&mut self) -> String {
-        self.top_mut().selected_completion().result_string()
+    pub fn get_selected_result(&self) -> String {
+        self.top().selected_completion().result_string()
     }
 
     pub fn select_previous(&mut self) {
@@ -190,22 +190,65 @@ impl ViewState {
     }
 }
 
-fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
-    let off = state.view_offset;
+struct State {
+    /// The collection of tabs (completer stacks).
+    tabs: Vec<ViewState>,
+
+    /// The index within `tabs` which is currently selected.
+    selection: usize,
+}
+
+impl State {
+    fn new(completers: Vec<Box<core::Completer>>) -> State {
+        let mut tabs = vec![];
+        for c in completers {
+            tabs.push(ViewState::new(c));
+        }
+        State {
+            tabs: tabs,
+            selection: 0,
+        }
+    }
+
+    fn current_tab(&self) -> &ViewState {
+        &self.tabs[self.selection]
+    }
+
+    fn current_tab_mut(&mut self) -> &mut ViewState {
+        &mut self.tabs[self.selection]
+    }
+
+    fn next_tab(&mut self) {
+        self.selection = (self.selection + 1) % self.tabs.len();
+    }
+
+    fn prev_tab(&mut self) {
+        self.selection = if self.selection == 0 {
+            self.tabs.len() - 1
+        } else {
+            self.selection - 1
+        }
+    }
+}
+
+fn print_state(term: &mut File, state: &State) -> io::Result<()> {
+    let completer_stack = &state.tabs[state.selection];
+    let level_state = completer_stack.top();
+    let off = level_state.view_offset;
     let prompt = "  Search: ";
-    let completions = state.completer.completions();
-    let status_string = format!("[{}-{}/{}]", off + 1,
+    let completions = level_state.completer.completions();
+    let status_string = format!("[{} {}-{}/{}]", level_state.completer.name(), off + 1,
                                 cmp::min(off + CHOOSER_HEIGHT + 1, completions.len()),
                                 completions.len());
     let term_cols = terminal::get_width(term).unwrap() as usize;
 
     writeln!(term, "{}{}{}{}{:>sw$}", termion::cursor::Left(100),
-             clear::CurrentLine, prompt, state.query, status_string,
-             sw = term_cols - prompt.len() - state.query.len())?;
+             clear::CurrentLine, prompt, level_state.query, status_string,
+             sw = term_cols - prompt.len() - level_state.query.len())?;
 
     let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
     for (i, p) in completions[off .. end_offset].iter().enumerate() {
-        if off + i == state.selection {
+        if off + i == level_state.selection {
             writeln!(term, "{}{}{}{}{}{}",
                      clear::CurrentLine, Bg(Black), Fg(White), p.display_string(),
                      Fg(Reset), Bg(Reset))?;
@@ -220,7 +263,7 @@ fn print_state(term: &mut File, state: &LevelViewState) -> io::Result<()> {
 
     write!(term, "{}{}",
            termion::cursor::Up((CHOOSER_HEIGHT + 1) as u16),
-           termion::cursor::Right((prompt.len() + state.query.len()) as u16))?;
+           termion::cursor::Right((prompt.len() + level_state.query.len()) as u16))?;
     return Result::Ok(());
 }
 
@@ -254,19 +297,21 @@ fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
     }
 }
 
-pub fn get_completion(mut line: String, completer: Box<core::Completer>)
+pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
                       -> io::Result<(String, i16)> {
     let mut term = termion::get_tty()?;
-    let mut state = ViewState::new(completer);
+    let mut state = State::new(completers);
 
     let original_query = get_initial_query(line.as_str());
-    state.query_set(original_query.as_str());
+    state.current_tab_mut().query_set(original_query.as_str());
 
     let original_terminal_state = terminal::prepare()?;
     write!(term, "{}", termion::cursor::Right(30))?;
 
-    state.top_mut().completer.fetch_completions();
-    print_state(&mut term, state.top()).unwrap();
+    for t in &mut state.tabs {
+        t.top_mut().completer.fetch_completions();
+    }
+    print_state(&mut term, &state).unwrap();
 
     let result;
 
@@ -278,36 +323,37 @@ pub fn get_completion(mut line: String, completer: Box<core::Completer>)
     req_sender.as_ref().unwrap().send(()).unwrap();
     loop {
         let key_or_nothing;
-        if !state.top().completer.fetching_completions_finished() {
+        if !state.current_tab().top().completer.fetching_completions_finished() {
             key_or_nothing = key_receiver.recv_timeout(time::Duration::from_millis(10)).ok();
-            state.top_mut().completer.fetch_completions();
+            state.current_tab_mut().top_mut().completer.fetch_completions();
         } else {
             key_or_nothing = key_receiver.recv().ok();
         }
 
         if let Some(key) = key_or_nothing {
             match key {
-                Up         => state.select_previous(),
-                Down       => state.select_next(),
-                PageUp     => state.previous_page(),
-                PageDown   => state.next_page(),
-                Home       => state.select_first(),
-                End        => state.select_last(),
+                Up         => state.current_tab_mut().select_previous(),
+                Down       => state.current_tab_mut().select_next(),
+                PageUp     => state.current_tab_mut().previous_page(),
+                PageDown   => state.current_tab_mut().next_page(),
+                Home       => state.current_tab_mut().select_first(),
+                End        => state.current_tab_mut().select_last(),
 
-                Left       => state.ascend(),
-                Right      => state.descend(),
+                Left       => state.current_tab_mut().ascend(),
+                Right      => state.current_tab_mut().descend(),
 
-                Char('\n') => { result = state.get_selected_result(); break },
+                Char('\n') => { result = state.current_tab().get_selected_result(); break },
                 Ctrl('c')  => { result = original_query.clone(); break },
-                Char(c)    => state.query_append(c),
-                Backspace  => state.query_backspace(),
+                Char('\t') => state.next_tab(),
+                Char(c)    => state.current_tab_mut().query_append(c),
+                Backspace  => state.current_tab_mut().query_backspace(),
 
                 _ => {},
             };
             // We are going to loop again, so we send a request to get another input key.
             req_sender.as_ref().unwrap().send(()).unwrap();
         }
-        print_state(&mut term, state.top())?;
+        print_state(&mut term, &state)?;
     }
 
     req_sender.take();

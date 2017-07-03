@@ -59,6 +59,10 @@ impl GitBranchCompleter {
 }
 
 impl core::Completer for GitBranchCompleter {
+    fn name(&self) -> String {
+        "br".to_owned()
+    }
+
     fn completions(&self) -> &[core::CompletionBox] {
         self.filtered_completions.as_slice()
     }
@@ -166,6 +170,10 @@ impl GitCommitCompleter {
 }
 
 impl core::Completer for GitCommitCompleter {
+    fn name(&self) -> String {
+        "co".to_owned()
+    }
+
     fn completions(&self) -> &[core::CompletionBox] {
         self.filtered_completions.as_slice()
     }

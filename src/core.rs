@@ -49,6 +49,9 @@ pub type CompletionBox = Arc<Completion + Sync + Send>;
 /// complete-rs can support multiple completion providers and switch
 /// between them in run-time.
 pub trait Completer {
+    /// Returns the name of the completer.
+    fn name(&self) -> String;
+
     /// Returns the completions provided by this completer.
     ///
     /// Completers are expected to store the collection of their

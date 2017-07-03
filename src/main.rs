@@ -6,12 +6,16 @@ use std::io::Write;
 use std::path;
 
 use completers::completers::filesystem;
+use completers::completers::git;
+use completers::core;
 use completers::ui;
 
-
 fn complete(line: String) -> io::Result<(String, i16)> {
-    let completer = Box::new(filesystem::FsCompleter::new(path::PathBuf::from(".")));
-    return ui::get_completion(line, completer);
+    let completers: Vec<Box<core::Completer>> = vec![
+        Box::new(filesystem::FsCompleter::new(path::PathBuf::from("."))),
+        Box::new(git::GitBranchCompleter::new()),
+    ];
+    return ui::get_completion(line, completers);
 }
 
 fn main() {
