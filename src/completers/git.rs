@@ -5,13 +5,16 @@ use std::process::Command;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use termion::color;
 
 use core;
 
 use std::io;
 use std::io::Write;
 
+#[derive(Debug, PartialEq)]
 enum GitBranchCompletionType {
+    Head,
     Branch,
     RemoteBranch,
     Tag,
@@ -25,6 +28,18 @@ struct GitBranchCompletion {
 impl core::Completion for GitBranchCompletion {
     fn result_string(&self) -> String {
         self.branch_name.clone()
+    }
+
+    fn display_string(&self) -> String {
+        let mut color_string = "".to_owned();
+        if self.kind == GitBranchCompletionType::Tag {
+            color_string = format!("{}", color::Fg(color::Yellow));
+        } else if self.kind == GitBranchCompletionType::Head {
+            color_string = format!("{}", color::Fg(color::Red));
+        } else if self.kind == GitBranchCompletionType::RemoteBranch {
+            color_string = format!("{}", color::Fg(color::LightBlack));
+        }
+        format!("{}{}{}", color_string, self.branch_name, color::Fg(color::Reset))
     }
 
     fn as_any(&self) -> &any::Any {
@@ -78,7 +93,7 @@ impl core::Completer for GitBranchCompleter {
 
         if result.status.success() {
             self.all_completions.push(Arc::new(GitBranchCompletion {
-                kind: GitBranchCompletionType::Branch,
+                kind: GitBranchCompletionType::Head,
                 branch_name: "HEAD".to_owned(),
             }));
             for line in String::from_utf8_lossy(&result.stdout).lines() {
