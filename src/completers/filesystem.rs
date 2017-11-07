@@ -12,7 +12,6 @@ use std::thread;
 use termion::color;
 
 use core;
-use core::Completion;
 
 const DIRECTORY_DEPTH_LIMIT: usize = 4;
 

@@ -37,9 +37,13 @@ impl LevelViewState {
         }
     }
 
-    fn selected_completion(&self) -> &core::Completion {
+    fn selected_completion(&self) -> Option<&core::Completion> {
         let completions = self.completer.completions();
-        &*completions[self.selection]
+        if completions.is_empty() {
+            None
+        } else {
+            Some(&*completions[self.selection])
+        }
     }
 
     pub fn select_previous(&mut self) {
@@ -128,8 +132,8 @@ impl ViewState {
         self.levels_stack.last_mut().unwrap()
     }
 
-    pub fn get_selected_result(&self) -> String {
-        self.top().selected_completion().result_string()
+    pub fn get_selected_result(&self) -> Option<String> {
+        self.top().selected_completion().map(|c| c.result_string())
     }
 
     pub fn select_previous(&mut self) {
@@ -177,10 +181,15 @@ impl ViewState {
     }
 
     fn descend(&mut self) {
-        let new_completer_or_nothing = self.top().completer.descend(self.top().selected_completion());
-        if let Some(mut new_completer) = new_completer_or_nothing {
-            new_completer.fetch_completions();
-            self.levels_stack.push(LevelViewState::new(new_completer));
+        if self.top().selected_completion().is_none() {
+            ()
+        } else {
+            let new_completer_or_nothing =
+                self.top().completer.descend(self.top().selected_completion().unwrap());
+            if let Some(mut new_completer) = new_completer_or_nothing {
+                new_completer.fetch_completions();
+                self.levels_stack.push(LevelViewState::new(new_completer));
+            }
         }
     }
 
@@ -224,7 +233,7 @@ impl State {
         &mut self.tabs[self.selection]
     }
 
-    pub fn get_selected_result(&self) -> String {
+    pub fn get_selected_result(&self) -> Option<String> {
         self.current_tab().get_selected_result()
     }
 
@@ -400,7 +409,11 @@ pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
                 Left       => state.ascend(),
                 Right      => state.descend(),
 
-                Char('\n') => { result = state.get_selected_result(); break },
+                Char('\n') => {
+                    if let Some(r) = state.get_selected_result() {
+                        result = r ; break
+                    }
+                },
                 Ctrl('c')  => { result = original_query.clone(); break },
                 Char('\t') => state.next_tab(),
                 Char(c)    => state.query_append(c),
