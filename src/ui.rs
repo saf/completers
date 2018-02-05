@@ -317,12 +317,16 @@ fn print_state(term: &mut File, state: &State) -> io::Result<()> {
 
     let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
     for (i, p) in completions[off .. end_offset].iter().enumerate() {
+        let completion_string = p.display_string();
+        let displayed_length = cmp::min(completion_string.len(), term_cols - 2);
+        let displayed_completion = &(completion_string)[..displayed_length];
         if off + i == level_state.selection {
             writeln!(term, "{}{}{}{}{}{}",
-                     clear::CurrentLine, Bg(Black), Fg(White), p.display_string(),
+                     clear::CurrentLine, Bg(Black), Fg(White),
+                     displayed_completion,
                      Fg(Reset), Bg(Reset))?;
         } else {
-            writeln!(term, "{}{}", clear::CurrentLine, p.display_string())?;
+            writeln!(term, "{}{}", clear::CurrentLine, displayed_completion)?;
         }
     }
 
