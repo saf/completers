@@ -199,7 +199,7 @@ impl core::Completer for GitCommitCompleter {
 
     fn fetch_completions(&mut self) {
         let result = Command::new("git").args(
-            &["log", "--format=%h%x09%ad%x09%an%x09%s", "--date=short"]
+            &["log", "--format=%h%x09%ad%x09%an%x09%s", "--date=short", &self.branch_name]
         ).output().expect("failed to run git-log");
 
         if result.status.success() {
