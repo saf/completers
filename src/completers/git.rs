@@ -9,9 +9,6 @@ use termion::color;
 
 use core;
 
-use std::io;
-use std::io::Write;
-
 #[derive(Debug, PartialEq)]
 enum GitBranchCompletionType {
     Head,

@@ -37,9 +37,15 @@ pub fn restore(settings: termios::Termios) -> io::Result<()> {
 //  making requests for terminal size fail.
 
 struct WinSize {
+    #[allow(dead_code)]
     ws_row: c_ushort,
+    
     ws_col: c_ushort,
+
+    #[allow(dead_code)]
     ws_xpixel: c_ushort,
+
+    #[allow(dead_code)]
     ws_ypixel: c_ushort
 }
 
