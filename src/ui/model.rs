@@ -257,7 +257,11 @@ impl Model {
     }
 
     pub fn next_tab(&mut self) {
+        // We preserve the query when switching tabs in order
+        // to retain the initial query when the user switches
+        // between tabs at the beginning.
         self.selection = (self.selection + 1) % self.stacks.len();
+        self.update_query();
     }
 
     pub fn start_fetching_completions(&mut self) {
