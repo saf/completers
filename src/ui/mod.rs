@@ -57,19 +57,37 @@ fn print_state(term: &mut File, model: &model::Model) -> io::Result<()> {
     return Result::Ok(());
 }
 
-pub fn get_initial_query(line: &str) -> String {
-    let line_length = line.len();
-    let last_word_boundary = line.rfind(WORD_BOUNDARIES);
-    let word_index = match last_word_boundary {
-        None => 0,
-        Some(index) => index + 1,
-    };
-
-    if word_index >= line_length {
-        "".to_string()
-    } else {
-        line[word_index..].to_string()
+/// Returns a pair of character indices within `line`
+/// which delimit the initial query, i.e., the string
+/// which will be substituted by completions.
+///
+/// This returns a pair representing the range [start, end).
+fn get_initial_query_range(line: &str, point: usize) -> (usize, usize) {
+    let words = line.split(WORD_BOUNDARIES);
+    let mut start : usize = 0;
+    for w in words {
+        let end = start + w.len();
+        if point >= start && point <= end {
+            return (start, end);
+        }
+        // Moving forward, we have to add 1 for the delimiter itself.
+        start = end + 1;
     }
+    // If we get here, it means that there were no words.
+    (0, 0)
+}
+
+#[test]
+fn test_initial_query_range() {
+    assert_eq!((0, 0), get_initial_query_range("", 0));
+    assert_eq!((0, 3), get_initial_query_range("foo", 0));
+    assert_eq!((0, 3), get_initial_query_range("foo", 2));
+    assert_eq!((0, 3), get_initial_query_range("foo", 3));
+    assert_eq!((0, 3), get_initial_query_range("foo bar", 0));
+    assert_eq!((0, 3), get_initial_query_range("foo bar", 3));
+    assert_eq!((4, 7), get_initial_query_range("foo bar", 4));
+    assert_eq!((4, 7), get_initial_query_range("foo bar", 6));
+    assert_eq!((4, 7), get_initial_query_range("foo bar", 7));
 }
 
 fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
@@ -87,13 +105,14 @@ fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
     }
 }
 
-pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
-                      -> io::Result<(String, i16)> {
+pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Completer>>)
+                      -> io::Result<(String, usize)> {
     let mut term = termion::get_tty()?;
     let mut model = model::Model::new(completers);
 
-    let original_query = get_initial_query(line.as_str());
-    model.query_set(original_query.as_str());
+    let (query_start, query_end) = get_initial_query_range(&line, point);
+    let original_query = (&line[query_start..query_end]).to_string();
+    model.query_set(&original_query);
 
     let original_terminal_state = terminal::prepare()?;
     write!(term, "{}", termion::cursor::Right(30))?;
@@ -101,7 +120,7 @@ pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
     model.start_fetching_completions();
     print_state(&mut term, &model).unwrap();
 
-    let result;
+    let result : String;
 
     let (key_sender, key_receiver) = mpsc::channel::<termion::event::Key>();
     let (req_sender, req_receiver) = mpsc::channel::<()>();
@@ -133,10 +152,13 @@ pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
                 Char('\n') => {
                     if let Some(r) = model.get_selected_result() {
                         result = r;
-                        break
+                        break;
                     }
                 },
-                Ctrl('c')  => { result = original_query.clone(); break },
+                Ctrl('c')  => {
+                    result = original_query.clone();
+                    break;
+                },
                 Char('\t') => model.next_tab(),
                 Char(c)    => model.query_append(c),
                 Backspace  => model.query_backspace(),
@@ -155,12 +177,8 @@ pub fn get_completion(mut line: String, completers: Vec<Box<core::Completer>>)
     clear()?;
     terminal::restore(original_terminal_state)?;
 
-    let line_length = line.len();
-    let original_length = original_query.len();
-    let new_length = result.len();
-    line.truncate(line_length - original_length);
-    line.push_str(&result);
-    return Result::Ok((line, (new_length - original_length) as i16));
+    let result_line = format!("{}{}{}", &line[..query_start], &result, &line[query_end..]);
+    return Result::Ok((result_line, query_start + result.len()));
 }
 
 pub fn clear() -> io::Result<()> {

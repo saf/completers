@@ -10,12 +10,12 @@ use completers::completers::git;
 use completers::core;
 use completers::ui;
 
-fn complete(line: String) -> io::Result<(String, i16)> {
+fn complete(line: String, point: usize) -> io::Result<(String, usize)> {
     let completers: Vec<Box<core::Completer>> = vec![
         Box::new(filesystem::FsCompleter::new(path::PathBuf::from("."))),
         Box::new(git::GitBranchCompleter::new()),
     ];
-    return ui::get_completion(line, completers);
+    return ui::get_completion(line, point, completers);
 }
 
 fn main() {
@@ -36,11 +36,11 @@ fn main() {
              .index(1))
         .get_matches();
 
-    let point: i16 = arguments.value_of("point").unwrap().parse().unwrap();
+    let point: usize = arguments.value_of("point").unwrap().parse().unwrap();
     let line = arguments.value_of("CURRENT_LINE").unwrap().to_string();
 
-    match complete(line) {
-        Ok((completion, point_move)) => println!("{} {}", point + point_move, completion),
+    match complete(line, point) {
+        Ok((completion, point)) => println!("{} {}", point, completion),
         Err(error) => writeln!(&mut std::io::stderr(), "{}", error).expect("Failed to write!"),
     };
 }
