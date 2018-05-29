@@ -228,7 +228,7 @@ impl Model {
         let query : String = self.query.clone();
         self.current_view_mut().update_query(query);
     }
-    
+
     pub fn query_backspace(&mut self) {
         self.query.pop();
         self.update_query();
@@ -247,7 +247,7 @@ impl Model {
     pub fn query(&self) -> String {
         self.query.clone()
     }
-    
+
     pub fn descend(&mut self) {
         self.current_stack_mut().descend()
     }

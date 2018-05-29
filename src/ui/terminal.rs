@@ -28,7 +28,7 @@ pub fn restore(settings: termios::Termios) -> io::Result<()> {
 
 //  The following code is adapted from the 'terminal_size' crate by
 //  Andrew Chin:
-// 
+//
 //    https://github.com/eminence/terminal-size
 //
 //  The original code had to be modified to accept an arbitrary File
@@ -39,7 +39,7 @@ pub fn restore(settings: termios::Termios) -> io::Result<()> {
 struct WinSize {
     #[allow(dead_code)]
     ws_row: c_ushort,
-    
+
     ws_col: c_ushort,
 
     #[allow(dead_code)]
