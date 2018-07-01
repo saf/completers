@@ -249,7 +249,7 @@ impl core::Completer for FsCompleter {
         let fs_completion = completion_any.downcast_ref::<FsCompletion>().unwrap();
         match fs_completion.entry_type {
             FsEntryType::Directory => {
-                let new_path = self.dir_path.join(fs_completion.relative_path.file_name().unwrap());
+                let new_path = self.dir_path.join(&fs_completion.relative_path);
                 Some(Box::new(FsCompleter::new(new_path)))
             },
             _ => None,
