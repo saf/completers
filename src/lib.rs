@@ -1,5 +1,7 @@
 extern crate itertools;
 extern crate libc;
+#[macro_use]
+extern crate log;
 extern crate termion;
 extern crate termios;
 

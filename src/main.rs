@@ -1,6 +1,9 @@
 extern crate clap;
 extern crate completers;
+extern crate log;
+extern crate simplelog;
 
+use std::fs;
 use std::io;
 use std::io::Write;
 use std::path;
@@ -34,7 +37,18 @@ fn main() {
              .help("The current input line")
              .required(true)
              .index(1))
+        .arg(clap::Arg::with_name("debug"))
         .get_matches();
+
+    let log_level: log::LevelFilter;
+    if arguments.is_present("debug") {
+        log_level = log::LevelFilter::Debug;
+    } else {
+        log_level = log::LevelFilter::Warn;
+    }
+    simplelog::WriteLogger::init(log_level,
+                                 simplelog::Config::default(),
+                                 fs::File::create("/tmp/completers.log").unwrap()).unwrap();
 
     let point: usize = arguments.value_of("point").unwrap().parse().unwrap();
     let line = arguments.value_of("CURRENT_LINE").unwrap().to_string();
