@@ -37,7 +37,9 @@ fn main() {
              .help("The current input line")
              .required(true)
              .index(1))
-        .arg(clap::Arg::with_name("debug"))
+        .arg(clap::Arg::with_name("debug")
+             .long("debug")
+             .help("print debug information to /tmp/completers.txt"))
         .get_matches();
 
     let log_level: log::LevelFilter;
