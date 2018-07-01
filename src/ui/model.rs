@@ -110,14 +110,19 @@ impl CompleterStack {
         self.stack.last_mut().unwrap()
     }
 
-    fn descend(&mut self) {
+    /// Descends into the selected completion.
+    ///
+    /// Returns `true` if we descended anywhere, `false` if we stayed in the same view.
+    fn descend(&mut self) -> bool {
         if self.top().selected_completion().is_some() {
             if let Some(mut descended_completer) =
                     self.top().completer.descend(self.top().selected_completion().unwrap()) {
                 descended_completer.fetch_completions();
                 self.stack.push(CompleterView::new(descended_completer));
+                return true;
             }
         }
+        false
     }
 
     fn ascend(&mut self) {
@@ -249,7 +254,10 @@ impl Model {
     }
 
     pub fn descend(&mut self) {
-        self.current_stack_mut().descend()
+        let descended = self.current_stack_mut().descend();
+        if descended {
+            self.query_set("");
+        }
     }
 
     pub fn ascend(&mut self) {
