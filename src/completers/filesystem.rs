@@ -13,7 +13,7 @@ use termion::color;
 
 use core;
 
-const DIRECTORY_DEPTH_LIMIT: usize = 4;
+const DIRECTORY_DEPTH_LIMIT: usize = 7;
 
 #[derive(PartialEq)]
 enum FsEntryType {
