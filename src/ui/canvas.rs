@@ -63,6 +63,42 @@ impl TermCanvas {
     pub fn height(&self) -> usize {
         self.height
     }
+
+    pub fn horizontal_line(&mut self,
+            row: usize, start_col: usize, length: usize) -> io::Result<()> {
+        for i in 0..length {
+            self.move_to(row, start_col + i)?;
+            write!(self, "\u{2500}")?;
+        }
+        Result::Ok(())
+    }
+
+    pub fn vertical_line(&mut self,
+            start_row: usize, col: usize, length: usize) -> io::Result<()> {
+        for i in 0..length {
+            self.move_to(start_row + i, col)?;
+            write!(self, "\u{2502}")?;
+        }
+        Result::Ok(())
+    }
+
+    pub fn rectangle(&mut self,
+            start_row: usize, start_col: usize,
+            end_row: usize, end_col: usize) -> io::Result<()> {
+        self.move_to(start_row, start_col)?;
+        write!(self, "\u{250C}")?;
+        self.move_to(start_row, end_col)?;
+        write!(self, "\u{2510}")?;
+        self.move_to(end_row, start_col)?;
+        write!(self, "\u{2514}")?;
+        self.move_to(end_row, end_col)?;
+        write!(self, "\u{2518}")?;
+        self.horizontal_line(start_row, start_col + 1, end_col - start_col - 1)?;
+        self.horizontal_line(end_row, start_col + 1, end_col - start_col - 1)?;
+        self.vertical_line(start_row + 1, start_col, end_row - start_row - 1)?;
+        self.vertical_line(start_row + 1, end_col, end_row - start_row - 1)?;
+        Result::Ok(())
+    }
 }
 
 impl Write for TermCanvas {
