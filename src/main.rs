@@ -1,7 +1,10 @@
 extern crate clap;
 extern crate completers;
+
 extern crate log;
 extern crate simplelog;
+
+extern crate termion;
 
 use std::fs;
 use std::io;
@@ -56,7 +59,13 @@ fn main() {
     let line = arguments.value_of("CURRENT_LINE").unwrap().to_string();
 
     match complete(line, point) {
-        Ok((completion, point)) => println!("{} {}", point, completion),
-        Err(error) => writeln!(&mut std::io::stderr(), "{}", error).expect("Failed to write!"),
+        Ok((completion, point)) =>
+                writeln!(&mut std::io::stderr(),
+                        "{} {}", point, completion)
+                        .expect("Failed to write result"),
+        Err(error) =>
+                writeln!(&mut std::io::stderr(),
+                        "{}", error)
+                        .expect("Failed to write error description"),
     };
 }

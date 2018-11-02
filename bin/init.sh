@@ -5,10 +5,11 @@ shift
 completers_args_=("$@")
 
 function completers_complete_ {
-    read point line < <("${completers_dir_}/../target/$completers_target_/completers" \
+    "${completers_dir_}/../target/$completers_target_/completers" \
 			    --point="${READLINE_POINT}" \
 			    "${READLINE_LINE}" \
-			    "${completers_args_[@]}")
+			    "${completers_args_[@]}" 2> /tmp/completers-result.txt
+    read point line <<< "$(cat /tmp/completers-result.txt)"
     READLINE_LINE=$line
     READLINE_POINT=$point
 }

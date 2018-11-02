@@ -1,13 +1,12 @@
-use std::fs;
 use std::io;
-use std::os::raw::c_ushort;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::io::RawFd;
+use std::os;
 
-use libc;
 use termios;
 
-const INPUT_FD: RawFd = 0;
+use term_size;
+use term_cursor;
+
+const INPUT_FD: os::unix::io::RawFd = 0;
 
 pub fn prepare() -> io::Result<termios::Termios> {
     use termios::*;
@@ -26,53 +25,21 @@ pub fn restore(settings: termios::Termios) -> io::Result<()> {
     return Result::Ok(());
 }
 
-//  The following code is adapted from the 'terminal_size' crate by
-//  Andrew Chin:
-//
-//    https://github.com/eminence/terminal-size
-//
-//  The original code had to be modified to accept an arbitrary File
-//  rather than use STDOUT. Our init.sh redirects output from this
-//  program to a pipe, so our STDOUT is not connected to a terminal,
-//  making requests for terminal size fail.
-
-struct WinSize {
-    #[allow(dead_code)]
-    ws_row: c_ushort,
-
-    ws_col: c_ushort,
-
-    #[allow(dead_code)]
-    ws_xpixel: c_ushort,
-
-    #[allow(dead_code)]
-    ws_ypixel: c_ushort
+/// Returns the size of the terminal, in the form of
+/// a tuple of (columns, rows).
+///
+/// If STDOUT is not a tty, returns `io::Error`
+pub fn get_dimensions() -> io::Result<(usize, usize)> {
+    term_size::dimensions().ok_or(
+        io::Error::new(io::ErrorKind::Other,
+                       "failed to fetch terminal dimensions")
+    )
 }
 
-/// Returns the size of the terminal, represented as a File object.
-///
-/// If STDOUT is not a tty, returns `None`
-pub fn get_width(term: &fs::File) -> Option<u16> {
-    let raw_fd = term.as_raw_fd();
-    let is_tty: bool = unsafe{
-        libc::isatty(raw_fd) == 1
-    };
-
-    if !is_tty { return None; }
-
-    let cols = unsafe {
-        let mut winsize = WinSize{ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0};
-        libc::ioctl(raw_fd, libc::TIOCGWINSZ, &mut winsize);
-        if winsize.ws_col > 0 {
-            winsize.ws_col
-        } else {
-            0
-        }
-    };
-
-    if cols > 0 {
-        Some(cols)
-    } else {
-        None
-    }
+/// Returns the cursor position within the terminal, in the form of a
+/// tuple of (row, column).
+pub fn get_cursor_position() -> io::Result<(i32, i32)> {
+    term_cursor::get_pos().or(
+        Result::Err(io::Error::new(io::ErrorKind::Other, "failed to fetch cursor position"))
+    )
 }

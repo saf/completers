@@ -1,8 +1,8 @@
+pub mod canvas;
 pub mod model;
 pub mod terminal;
 
 use std::cmp;
-use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::sync::mpsc;
@@ -19,41 +19,38 @@ use config::*;
 
 use core;
 
-fn print_state(term: &mut File, model: &model::Model) -> io::Result<()> {
+fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io::Result<()> {
     let off = model.view_offset();
     let prompt = "  Search: ";
     let completions = model.completions();
     let status_string = format!("[{} {}-{}/{}]", model.completer_name(), off + 1,
                                 cmp::min(off + CHOOSER_HEIGHT + 1, completions.len()),
                                 completions.len());
-    let term_cols = terminal::get_width(term).unwrap() as usize;
 
-    writeln!(term, "{}{}{}{}{:>sw$}", termion::cursor::Left(100),
-             clear::CurrentLine, prompt, model.query(), status_string,
-             sw = term_cols - prompt.len() - model.query().len())?;
+    term_canvas.clear()?;
+    write!(term_canvas, "{}{}", prompt, model.query())?;
+    let term_width = term_canvas.width();
+    term_canvas.move_to(0, term_width - status_string.len())?;
+    write!(term_canvas, "{}", status_string)?;
 
     let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
     for (i, p) in completions[off .. end_offset].iter().enumerate() {
         let completion_string = p.display_string();
-        let displayed_length = cmp::min(completion_string.len(), term_cols - 2);
+        let displayed_length = cmp::min(completion_string.len(), term_canvas.width() - 2);
         let displayed_completion = &(completion_string)[..displayed_length];
+        term_canvas.move_to(i + 1, 0)?;
         if off + i == model.selection() {
-            writeln!(term, "{}{}{}{}{}{}",
-                     clear::CurrentLine, Bg(Black), Fg(White),
+            write!(term_canvas, "{}{}{}{}{}",
+                     Bg(Black), Fg(White),
                      displayed_completion,
                      Fg(Reset), Bg(Reset))?;
         } else {
-            writeln!(term, "{}{}", clear::CurrentLine, displayed_completion)?;
+            write!(term_canvas, "{}", displayed_completion)?;
         }
     }
 
-    for _ in end_offset .. off + CHOOSER_HEIGHT {
-        writeln!(term, "{}", clear::CurrentLine)?;
-    }
+    term_canvas.move_to(0, prompt.len() + model.query().len())?;
 
-    write!(term, "{}{}",
-           termion::cursor::Up((CHOOSER_HEIGHT + 1) as u16),
-           termion::cursor::Right((prompt.len() + model.query().len()) as u16))?;
     return Result::Ok(());
 }
 
@@ -107,7 +104,7 @@ fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
 
 pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Completer>>)
                       -> io::Result<(String, usize)> {
-    let mut term = termion::get_tty()?;
+    let term = termion::get_tty()?;
     let mut model = model::Model::new(completers);
 
     let (query_start, query_end) = get_initial_query_range(&line, point);
@@ -115,10 +112,10 @@ pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Comp
     model.query_set(&original_query);
 
     let original_terminal_state = terminal::prepare()?;
-    write!(term, "{}", termion::cursor::Right(30))?;
+
+    let mut term_canvas = canvas::TermCanvas::new(term, CHOOSER_HEIGHT + 1)?;
 
     model.start_fetching_completions();
-    print_state(&mut term, &model).unwrap();
 
     let result : String;
 
@@ -129,6 +126,8 @@ pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Comp
 
     req_sender.as_ref().unwrap().send(()).unwrap();
     loop {
+        print_state(&mut term_canvas, &model)?;
+
         let key_or_nothing;
         if !model.fetching_completions_finished() {
             key_or_nothing = key_receiver.recv_timeout(time::Duration::from_millis(10)).ok();
@@ -165,10 +164,8 @@ pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Comp
 
                 _ => {},
             };
-            // We are going to loop again, so we send a request to get another input key.
             req_sender.as_ref().unwrap().send(()).unwrap();
         }
-        print_state(&mut term, &model)?;
     }
 
     req_sender.take();

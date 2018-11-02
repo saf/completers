@@ -1,9 +1,10 @@
 extern crate itertools;
 extern crate libc;
-#[macro_use]
 extern crate log;
 extern crate termion;
 extern crate termios;
+extern crate term_size;
+extern crate term_cursor;
 
 pub mod completers;
 pub mod config;
