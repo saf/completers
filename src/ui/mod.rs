@@ -15,7 +15,7 @@ use termion::input::TermRead;
 use termion::color::*;
 use termion::event::Key::*;
 
-use config::*;
+use config::CHOOSER_HEIGHT;
 
 use core;
 
@@ -54,39 +54,6 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
     return Result::Ok(());
 }
 
-/// Returns a pair of character indices within `line`
-/// which delimit the initial query, i.e., the string
-/// which will be substituted by completions.
-///
-/// This returns a pair representing the range [start, end).
-fn get_initial_query_range(line: &str, point: usize) -> (usize, usize) {
-    let words = line.split(WORD_BOUNDARIES);
-    let mut start : usize = 0;
-    for w in words {
-        let end = start + w.len();
-        if point >= start && point <= end {
-            return (start, end);
-        }
-        // Moving forward, we have to add 1 for the delimiter itself.
-        start = end + 1;
-    }
-    // If we get here, it means that there were no words.
-    (0, 0)
-}
-
-#[test]
-fn test_initial_query_range() {
-    assert_eq!((0, 0), get_initial_query_range("", 0));
-    assert_eq!((0, 3), get_initial_query_range("foo", 0));
-    assert_eq!((0, 3), get_initial_query_range("foo", 2));
-    assert_eq!((0, 3), get_initial_query_range("foo", 3));
-    assert_eq!((0, 3), get_initial_query_range("foo bar", 0));
-    assert_eq!((0, 3), get_initial_query_range("foo bar", 3));
-    assert_eq!((4, 7), get_initial_query_range("foo bar", 4));
-    assert_eq!((4, 7), get_initial_query_range("foo bar", 6));
-    assert_eq!((4, 7), get_initial_query_range("foo bar", 7));
-}
-
 fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
                              key_sender: mpsc::Sender<termion::event::Key>) {
     let mut keys = io::stdin().keys();
@@ -102,14 +69,13 @@ fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
     }
 }
 
-pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Completer>>)
-                      -> io::Result<(String, usize)> {
-    let term = termion::get_tty()?;
+pub fn get_completion(initial_query: &str,
+                      completers: Vec<Box<dyn core::Completer>>)
+                      -> io::Result<String> {
+    let mut term = termion::get_tty()?;
     let mut model = model::Model::new(completers);
 
-    let (query_start, query_end) = get_initial_query_range(&line, point);
-    let original_query = (&line[query_start..query_end]).to_string();
-    model.query_set(&original_query);
+    model.query_set(&initial_query);
 
     let original_terminal_state = terminal::prepare()?;
 
@@ -155,7 +121,7 @@ pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Comp
                     }
                 },
                 Ctrl('c')  => {
-                    result = original_query.clone();
+                    result = initial_query.to_owned();
                     break;
                 },
                 Char('\t') => model.next_tab(),
@@ -174,8 +140,7 @@ pub fn get_completion(line: String, point: usize, completers: Vec<Box<core::Comp
     clear()?;
     terminal::restore(original_terminal_state)?;
 
-    let result_line = format!("{}{}{}", &line[..query_start], &result, &line[query_end..]);
-    return Result::Ok((result_line, query_start + result.len()));
+    return Result::Ok(result);
 }
 
 pub fn clear() -> io::Result<()> {

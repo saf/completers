@@ -41,7 +41,7 @@ impl core::Completion for FsCompletion {
         }
     }
 
-    fn as_any(&self) -> &any::Any {
+    fn as_any(&self) -> &dyn any::Any {
         self
     }
 }
@@ -181,7 +181,7 @@ impl FsCompleter {
             request_send: request_send,
             response_recv: response_recv,
         };
-       
+
         FsCompleter {
             dir_path: dir_path,
             all_completions: vec![],
