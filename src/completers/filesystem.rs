@@ -11,7 +11,7 @@ use std::thread;
 
 use termion::color;
 
-use core;
+use crate::core;
 
 const DIRECTORY_DEPTH_LIMIT: usize = 7;
 
@@ -244,7 +244,7 @@ impl core::Completer for FsCompleter {
         self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
     }
 
-    fn descend(&self, completion: &core::Completion) -> Option<Box<core::Completer>> {
+    fn descend(&self, completion: &dyn core::Completion) -> Option<Box<dyn core::Completer>> {
         let completion_any = completion.as_any();
         let fs_completion = completion_any.downcast_ref::<FsCompletion>().unwrap();
         match fs_completion.entry_type {
@@ -255,7 +255,7 @@ impl core::Completer for FsCompleter {
         }
     }
 
-    fn ascend(&self) -> Option<Box<core::Completer>> {
+    fn ascend(&self) -> Option<Box<dyn core::Completer>> {
         let current_path = self.dir_path.clone();
         if current_path.ends_with(path::Path::new(".")) {
             Some(Box::new(FsCompleter::new(path::PathBuf::from(".."))))

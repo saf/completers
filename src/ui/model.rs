@@ -1,11 +1,11 @@
 use std::cmp;
 
-use config::*;
-use core;
+use crate::config::*;
+use crate::core;
 
 struct CompleterView {
     /// The completer which provides the propositions for this view.
-    pub completer: Box<core::Completer>,
+    pub completer: Box<dyn core::Completer>,
 
     /// The index of the first completion which is currently
     /// displayed.
@@ -23,7 +23,7 @@ struct CompleterView {
 }
 
 impl CompleterView {
-    pub fn new(completer: Box<core::Completer>) -> CompleterView {
+    pub fn new(completer: Box<dyn core::Completer>) -> CompleterView {
         CompleterView {
             completer: completer,
             view_offset: 0,
@@ -32,7 +32,7 @@ impl CompleterView {
         }
     }
 
-    fn selected_completion(&self) -> Option<&core::Completion> {
+    fn selected_completion(&self) -> Option<&dyn core::Completion> {
         let completions = self.completer.completions();
         if completions.is_empty() {
             None
@@ -98,7 +98,7 @@ struct CompleterStack {
 }
 
 impl CompleterStack {
-    pub fn new(completer: Box<core::Completer>) -> CompleterStack {
+    pub fn new(completer: Box<dyn core::Completer>) -> CompleterStack {
         CompleterStack { stack: vec![CompleterView::new(completer)], }
     }
 
@@ -157,7 +157,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(completers: Vec<Box<core::Completer>>) -> Model {
+    pub fn new(completers: Vec<Box<dyn core::Completer>>) -> Model {
         let mut stacks = vec![];
         for c in completers {
             stacks.push(CompleterStack::new(c));

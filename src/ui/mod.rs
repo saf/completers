@@ -15,9 +15,9 @@ use termion::input::TermRead;
 use termion::color::*;
 use termion::event::Key::*;
 
-use config::CHOOSER_HEIGHT;
+use crate::config::CHOOSER_HEIGHT;
 
-use core;
+use crate::core;
 
 fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io::Result<()> {
     let off = model.view_offset();
@@ -72,7 +72,7 @@ fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
 pub fn get_completion(initial_query: &str,
                       completers: Vec<Box<dyn core::Completer>>)
                       -> io::Result<String> {
-    let mut term = termion::get_tty()?;
+    let term = termion::get_tty()?;
     let mut model = model::Model::new(completers);
 
     model.query_set(&initial_query);

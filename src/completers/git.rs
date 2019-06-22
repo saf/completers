@@ -7,7 +7,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use termion::color;
 
-use core;
+use crate::core;
 
 #[derive(Debug, PartialEq)]
 enum GitBranchCompletionType {
@@ -39,7 +39,7 @@ impl core::Completion for GitBranchCompletion {
         format!("{}{}{}", color_string, self.branch_name, color::Fg(color::Reset))
     }
 
-    fn as_any(&self) -> &any::Any {
+    fn as_any(&self) -> &dyn any::Any {
         self
     }
 }
@@ -123,7 +123,7 @@ impl core::Completer for GitBranchCompleter {
     }
 
 
-    fn descend(&self, completion: &core::Completion) -> Option<Box<core::Completer>> {
+    fn descend(&self, completion: &dyn core::Completion) -> Option<Box<dyn core::Completer>> {
         let completion_any = completion.as_any();
         let branch_completion = completion_any.downcast_ref::<GitBranchCompletion>().unwrap();
         Some(Box::new(GitCommitCompleter::new(branch_completion.branch_name.as_str())))
@@ -146,7 +146,7 @@ impl core::Completion for GitCommitCompletion {
         format!("{:10} {:12} {:25} {}", &self.hash, &self.date, &self.author, &self.subject)
     }
 
-    fn as_any(&self) -> &any::Any {
+    fn as_any(&self) -> &dyn any::Any {
         self
     }
 }

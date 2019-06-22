@@ -27,7 +27,7 @@ pub trait Completion : any::Any {
     ///
     /// This is needed for technical reasons because concrete
     /// completers will have to down-cast `Completion` trait objects.
-    fn as_any(&self) -> &any::Any;
+    fn as_any(&self) -> &dyn any::Any;
 }
 
 /// The type of completions returned from completers.
@@ -42,7 +42,7 @@ pub trait Completion : any::Any {
 /// completions as collections of Arcs to `core::Completion` trait
 /// objects and return references to those collections from their
 /// `completions` methods.
-pub type CompletionBox = Arc<Completion + Sync + Send>;
+pub type CompletionBox = Arc<dyn Completion + Sync + Send>;
 
 /// A trait for types which provide completions.
 ///
@@ -91,7 +91,7 @@ pub trait Completer {
     /// The default implementation returns None for any completion,
     /// which means that descending is not possible for any
     /// completion.
-    fn descend(&self, &Completion) -> Option<Box<Completer>> {
+    fn descend(&self, _: &dyn Completion) -> Option<Box<dyn Completer>> {
         None
     }
 
@@ -107,7 +107,7 @@ pub trait Completer {
     /// A completer may return a new completer of the same or
     /// different type than itself, or return None to indicate that
     /// ascending from the current completer is not possible.
-    fn ascend(&self) -> Option<Box<Completer>> {
+    fn ascend(&self) -> Option<Box<dyn Completer>> {
         None
     }
 }
