@@ -12,6 +12,7 @@ use std::thread;
 use termion::color;
 
 use crate::core;
+use crate::scoring;
 
 const DIRECTORY_DEPTH_LIMIT: usize = 7;
 
@@ -193,8 +194,9 @@ impl FsCompleter {
 
     fn filter_completions(&self, completions: &[core::CompletionBox]) -> Vec<core::CompletionBox> {
         let mut result = Vec::new();
+        let lc_query = self.query.to_lowercase();
         for completion_arc in completions {
-            if completion_arc.result_string().contains(&self.query) {
+            if scoring::subsequence_match(&lc_query, &completion_arc.result_string()) {
                 result.push(completion_arc.clone());
             }
         }

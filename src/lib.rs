@@ -9,6 +9,7 @@ extern crate term_cursor;
 pub mod completers;
 pub mod config;
 pub mod core;
+pub mod scoring;
 pub mod ui;
 
 
