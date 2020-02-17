@@ -12,7 +12,6 @@ use std::thread;
 use termion::color;
 
 use crate::core;
-use crate::scoring;
 
 const DIRECTORY_DEPTH_LIMIT: usize = 7;
 
@@ -171,9 +170,7 @@ fn fetching_thread_routine(
 /// return to this level.
 pub struct FsCompleter {
     dir_path: path::PathBuf,
-    all_completions: Vec<core::CompletionBox>,
-    filtered_completions: Vec<core::CompletionBox>,
-    query: String,
+    completions: Vec<core::CompletionBox>,
     fetching_thread: Option<BgThread>,
 }
 
@@ -193,22 +190,9 @@ impl FsCompleter {
 
         FsCompleter {
             dir_path: dir_path,
-            all_completions: vec![],
-            filtered_completions: vec![],
-            query: String::new(),
+            completions: vec![],
             fetching_thread: Some(bg_thread),
         }
-    }
-
-    fn filter_completions(&self, completions: &[core::CompletionBox]) -> Vec<core::CompletionBox> {
-        let mut result = Vec::new();
-        let lc_query = self.query.to_lowercase();
-        for completion_arc in completions {
-            if scoring::subsequence_match(&lc_query, &completion_arc.result_string()) {
-                result.push(completion_arc.clone());
-            }
-        }
-        result
     }
 }
 
@@ -218,7 +202,7 @@ impl core::Completer for FsCompleter {
     }
 
     fn completions(&self) -> &[core::CompletionBox] {
-        self.filtered_completions.as_slice()
+        &self.completions
     }
 
     fn fetching_completions_finished(&self) -> bool {
@@ -235,9 +219,7 @@ impl core::Completer for FsCompleter {
             let new_completions = t.response_recv.recv().unwrap();
             match new_completions {
                 Some(completions) => {
-                    let filtered_completions = self.filter_completions(&completions);
-                    self.filtered_completions.extend(filtered_completions);
-                    self.all_completions.extend(completions);
+                    self.completions.extend(completions);
                     // We have 'taken' bg_thread out of the structure, but it turns
                     // out we have to restore it.
                     self.fetching_thread = Some(t);
@@ -247,11 +229,6 @@ impl core::Completer for FsCompleter {
                 }
             }
         }
-    }
-
-    fn set_query(&mut self, query: String) {
-        self.query = query;
-        self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
     }
 
     fn descend(&self, completion: &dyn core::Completion) -> Option<Box<dyn core::Completer>> {

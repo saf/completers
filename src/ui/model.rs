@@ -2,6 +2,7 @@ use std::cmp;
 
 use crate::config::*;
 use crate::core;
+use crate::scoring;
 
 struct CompleterView {
     /// The completer which provides the propositions for this view.
@@ -15,10 +16,6 @@ struct CompleterView {
     pub selection: usize,
 
     /// The current query for this completer.
-    ///
-    /// This is stored here because when ascending to a completer view
-    /// which was previously seen, we want to retain this completer's
-    /// query so that the selection on that level is not lost.
     pub query: String,
 }
 
@@ -32,13 +29,9 @@ impl CompleterView {
         }
     }
 
-    fn selected_completion(&self) -> Option<&dyn core::Completion> {
-        let completions = self.completer.completions();
-        if completions.is_empty() {
-            None
-        } else {
-            Some(&*completions[self.selection])
-        }
+    fn selected_completion(&self) -> Option<core::CompletionBox> {
+        let completions = self.completions();
+        completions.get(self.selection).cloned()
     }
 
     pub fn select_previous(&mut self) {
@@ -85,7 +78,16 @@ impl CompleterView {
     fn update_query(&mut self, new_query: String) {
         self.selection = 0;
         self.view_offset = 0;
-        self.completer.set_query(new_query);
+        self.query = new_query;
+    }
+
+    fn completions(&self) -> Vec<core::CompletionBox> {
+        let all_completions = self.completer.completions();
+        all_completions
+            .iter()
+            .cloned()
+            .filter(|c| scoring::subsequence_match(&self.query, &c.search_string()))
+            .collect()
     }
 }
 
@@ -116,12 +118,8 @@ impl CompleterStack {
     ///
     /// Returns `true` if we descended anywhere, `false` if we stayed in the same view.
     fn descend(&mut self) -> bool {
-        if self.top().selected_completion().is_some() {
-            if let Some(mut descended_completer) = self
-                .top()
-                .completer
-                .descend(self.top().selected_completion().unwrap())
-            {
+        if let Some(scb) = self.top().selected_completion() {
+            if let Some(mut descended_completer) = self.top().completer.descend(&*scb) {
                 descended_completer.fetch_completions();
                 self.stack.push(CompleterView::new(descended_completer));
                 return true;
@@ -194,8 +192,8 @@ impl Model {
         self.current_view().completer.name()
     }
 
-    pub fn completions(&self) -> &[core::CompletionBox] {
-        self.current_view().completer.completions()
+    pub fn completions(&self) -> Vec<core::CompletionBox> {
+        self.current_view().completions()
     }
 
     pub fn get_selected_result(&self) -> Option<String> {

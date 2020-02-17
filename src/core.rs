@@ -23,6 +23,14 @@ pub trait Completion: any::Any {
         self.result_string()
     }
 
+    /// Returns the string to be analyzed during the search.
+    ///
+    /// The default implementation is to search in the same
+    /// string as `result_string`.
+    fn search_string(&self) -> String {
+        self.result_string()
+    }
+
     /// Converts a completion to an `Any` reference.
     ///
     /// This is needed for technical reasons because concrete
@@ -77,9 +85,6 @@ pub trait Completer {
     /// appropriate for completers which generate all their
     /// completions at once.
     fn fetch_completions(&mut self) {}
-
-    /// Sets the search query for the completer.
-    fn set_query(&mut self, query: String);
 
     /// Descends into the given completion if possible, yielding a new
     /// completer. Returns None if descending is not possible for the

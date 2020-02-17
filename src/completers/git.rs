@@ -122,11 +122,6 @@ impl core::Completer for GitBranchCompleter {
         self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
     }
 
-    fn set_query(&mut self, query: String) {
-        self.query = query;
-        self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
-    }
-
     fn descend(&self, completion: &dyn core::Completion) -> Option<Box<dyn core::Completer>> {
         let completion_any = completion.as_any();
         let branch_completion = completion_any
@@ -157,6 +152,10 @@ impl core::Completion for GitCommitCompletion {
         )
     }
 
+    fn search_string(&self) -> String {
+        self.subject.clone()
+    }
+
     fn as_any(&self) -> &dyn any::Any {
         self
     }
@@ -164,37 +163,15 @@ impl core::Completion for GitCommitCompletion {
 
 struct GitCommitCompleter {
     branch_name: String,
-    all_completions: Vec<core::CompletionBox>,
-    query: String,
-    filtered_completions: Vec<core::CompletionBox>,
+    completions: Vec<core::CompletionBox>,
 }
 
 impl GitCommitCompleter {
     fn new<B: Into<String>>(branch_name: B) -> GitCommitCompleter {
         GitCommitCompleter {
             branch_name: branch_name.into(),
-            all_completions: vec![],
-            query: String::new(),
-            filtered_completions: vec![],
+            completions: vec![],
         }
-    }
-
-    fn filter_completions(&self, completions: &[core::CompletionBox]) -> Vec<core::CompletionBox> {
-        let mut result = Vec::new();
-        for completion_arc in completions {
-            let completion_any = completion_arc.as_any();
-            let commit_completion = completion_any
-                .downcast_ref::<GitCommitCompletion>()
-                .unwrap();
-            if commit_completion
-                .subject
-                .to_lowercase()
-                .contains(&self.query.to_lowercase())
-            {
-                result.push(completion_arc.clone());
-            }
-        }
-        result
     }
 }
 
@@ -204,7 +181,7 @@ impl core::Completer for GitCommitCompleter {
     }
 
     fn completions(&self) -> &[core::CompletionBox] {
-        self.filtered_completions.as_slice()
+        &self.completions
     }
 
     fn fetching_completions_finished(&self) -> bool {
@@ -226,7 +203,7 @@ impl core::Completer for GitCommitCompleter {
             for line in String::from_utf8_lossy(&result.stdout).lines() {
                 let tuple = line.split('\t').next_tuple();
                 if let Some((hash, date, author, subject)) = tuple {
-                    self.all_completions.push(Arc::new(GitCommitCompletion {
+                    self.completions.push(Arc::new(GitCommitCompletion {
                         hash: hash.to_owned(),
                         date: date.to_owned(),
                         author: author.to_owned(),
@@ -235,12 +212,5 @@ impl core::Completer for GitCommitCompleter {
                 }
             }
         }
-
-        self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
-    }
-
-    fn set_query(&mut self, query: String) {
-        self.query = query;
-        self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
     }
 }
