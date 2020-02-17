@@ -82,12 +82,22 @@ impl CompleterView {
     }
 
     fn completions(&self) -> Vec<core::CompletionBox> {
+        let scoring_settings = scoring::ScoringSettings {
+            letter_match: 1,
+            word_start_bonus: 2,
+            subsequent_bonus: 3,
+        };
         let all_completions = self.completer.completions();
-        all_completions
+        let mut filtered_completions = all_completions
             .iter()
             .cloned()
             .filter(|c| scoring::subsequence_match(&self.query, &c.search_string()))
-            .collect()
+            .collect::<Vec<_>>();
+        log::info!("There are {} completions", filtered_completions.len());
+        filtered_completions.sort_by_cached_key(|c| {
+            1000u64 - scoring::score(&c.search_string(), &self.query, &scoring_settings)
+        });
+        filtered_completions
     }
 }
 

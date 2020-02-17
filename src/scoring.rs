@@ -81,9 +81,9 @@ fn test_word_start_indices() {
 /// This aims to represent the configuration of assigning scores
 /// which may favor word starts or consecutive characters.
 pub struct ScoringSettings {
-    letter_match: u64,
-    subsequent_bonus: u64,
-    word_start_bonus: u64,
+    pub letter_match: u64,
+    pub subsequent_bonus: u64,
+    pub word_start_bonus: u64,
 }
 /// An array to store the scores for prefixes of the
 /// query and the candidate string.
