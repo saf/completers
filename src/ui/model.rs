@@ -99,7 +99,9 @@ struct CompleterStack {
 
 impl CompleterStack {
     pub fn new(completer: Box<dyn core::Completer>) -> CompleterStack {
-        CompleterStack { stack: vec![CompleterView::new(completer)], }
+        CompleterStack {
+            stack: vec![CompleterView::new(completer)],
+        }
     }
 
     pub fn top(&self) -> &CompleterView {
@@ -115,8 +117,11 @@ impl CompleterStack {
     /// Returns `true` if we descended anywhere, `false` if we stayed in the same view.
     fn descend(&mut self) -> bool {
         if self.top().selected_completion().is_some() {
-            if let Some(mut descended_completer) =
-                    self.top().completer.descend(self.top().selected_completion().unwrap()) {
+            if let Some(mut descended_completer) = self
+                .top()
+                .completer
+                .descend(self.top().selected_completion().unwrap())
+            {
                 descended_completer.fetch_completions();
                 self.stack.push(CompleterView::new(descended_completer));
                 return true;
@@ -194,7 +199,9 @@ impl Model {
     }
 
     pub fn get_selected_result(&self) -> Option<String> {
-        self.current_view().selected_completion().map(|c| c.result_string())
+        self.current_view()
+            .selected_completion()
+            .map(|c| c.result_string())
     }
 
     pub fn view_offset(&self) -> usize {
@@ -230,7 +237,7 @@ impl Model {
     }
 
     fn update_query(&mut self) {
-        let query : String = self.query.clone();
+        let query: String = self.query.clone();
         self.current_view_mut().update_query(query);
     }
 
@@ -283,6 +290,8 @@ impl Model {
     }
 
     pub fn fetching_completions_finished(&self) -> bool {
-        self.current_view().completer.fetching_completions_finished()
+        self.current_view()
+            .completer
+            .fetching_completions_finished()
     }
 }

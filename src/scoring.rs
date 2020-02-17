@@ -137,10 +137,10 @@ struct ScoringArray<'a> {
 impl ScoringArray<'_> {
     /// Create a new array.
     pub fn new(
-            candidate_chars: Vec<char>,
-            query_chars: Vec<char>,
-            word_start_indices: Vec<usize>,
-            scoring_settings: &ScoringSettings,
+        candidate_chars: Vec<char>,
+        query_chars: Vec<char>,
+        word_start_indices: Vec<usize>,
+        scoring_settings: &ScoringSettings,
     ) -> ScoringArray {
         ScoringArray {
             candidate_chars: candidate_chars,
@@ -164,7 +164,7 @@ impl ScoringArray<'_> {
     /// into the match.
     fn take_score(&self, query_index: usize, candidate_index: usize) -> u64 {
         if self.query_chars[query_index] != self.candidate_chars[candidate_index] {
-            return 0
+            return 0;
         }
 
         let score_from_prev = if query_index > 0 && candidate_index > 0 {
@@ -178,9 +178,7 @@ impl ScoringArray<'_> {
         } else {
             0
         };
-        score_from_prev
-                + self.settings.letter_match
-                + self.word_start_bonus(candidate_index)
+        score_from_prev + self.settings.letter_match + self.word_start_bonus(candidate_index)
     }
 
     /// Compute the score if we do not take the current character
@@ -219,9 +217,12 @@ impl ScoringArray<'_> {
     /// score is the score from the last array cell in the last row.
     pub fn score(&self) -> u64 {
         let empty = vec![];
-        let array_end = self.array
-                .last().unwrap_or(&empty)
-                .last().unwrap_or(&ScoringEntry { take: 0, leave: 0 });
+        let array_end = self
+            .array
+            .last()
+            .unwrap_or(&empty)
+            .last()
+            .unwrap_or(&ScoringEntry { take: 0, leave: 0 });
         std::cmp::max(array_end.take, array_end.leave)
     }
 }
@@ -249,19 +250,18 @@ pub fn score(candidate: &str, query: &str, settings: &ScoringSettings) -> u64 {
     let query_chars = query.chars().collect::<Vec<_>>();
     let word_starts = word_start_indices(candidate_chars.iter());
 
-    let mut scoring_array = ScoringArray::new(
-        candidate_chars,
-        query_chars,
-        word_starts,
-        settings,
-    );
+    let mut scoring_array = ScoringArray::new(candidate_chars, query_chars, word_starts, settings);
     scoring_array.compute();
     scoring_array.score()
 }
 
 #[test]
 fn test_scoring_plain() {
-    let settings = ScoringSettings { letter_match: 1, subsequent_bonus: 0, word_start_bonus: 0 };
+    let settings = ScoringSettings {
+        letter_match: 1,
+        subsequent_bonus: 0,
+        word_start_bonus: 0,
+    };
     assert_eq!(score("", "", &settings), 0);
     assert_eq!(score("foo", "", &settings), 0);
     assert_eq!(score("foo", "f", &settings), 1);
@@ -277,7 +277,11 @@ fn test_scoring_plain() {
 
 #[test]
 fn test_scoring_word_start_bonus() {
-    let settings = ScoringSettings { letter_match: 1, subsequent_bonus: 0, word_start_bonus: 3 };
+    let settings = ScoringSettings {
+        letter_match: 1,
+        subsequent_bonus: 0,
+        word_start_bonus: 3,
+    };
     assert_eq!(score("", "", &settings), 0);
     assert_eq!(score("foo", "", &settings), 0);
     assert_eq!(score("foo", "f", &settings), 4);
@@ -292,7 +296,11 @@ fn test_scoring_word_start_bonus() {
 
 #[test]
 fn test_scoring_subsequent_bonus() {
-    let settings = ScoringSettings { letter_match: 1, subsequent_bonus: 3, word_start_bonus: 0 };
+    let settings = ScoringSettings {
+        letter_match: 1,
+        subsequent_bonus: 3,
+        word_start_bonus: 0,
+    };
     assert_eq!(score("", "", &settings), 0);
     assert_eq!(score("foo", "", &settings), 0);
     assert_eq!(score("foo", "f", &settings), 1);

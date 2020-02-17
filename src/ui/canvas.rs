@@ -4,7 +4,6 @@
 /// a canvas does not fill the entire terminal screen (does not use the
 /// alternate screen feature), but allows modifying a portion of the terminal
 /// screen within the current window below the current command line.
-
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -40,9 +39,13 @@ impl TermCanvas {
 
     pub fn move_to(&mut self, row: usize, col: usize) -> io::Result<()> {
         // TODO Add bounds checking.
-        write!(self.term, "{}", termion::cursor::Goto(
-            (col + self.start_col + 1) as u16,
-            (row + self.start_row + 1) as u16)
+        write!(
+            self.term,
+            "{}",
+            termion::cursor::Goto(
+                (col + self.start_col + 1) as u16,
+                (row + self.start_row + 1) as u16
+            )
         )?;
         Result::Ok(())
     }
@@ -64,8 +67,12 @@ impl TermCanvas {
         self.height
     }
 
-    pub fn horizontal_line(&mut self,
-            row: usize, start_col: usize, length: usize) -> io::Result<()> {
+    pub fn horizontal_line(
+        &mut self,
+        row: usize,
+        start_col: usize,
+        length: usize,
+    ) -> io::Result<()> {
         for i in 0..length {
             self.move_to(row, start_col + i)?;
             write!(self, "\u{2500}")?;
@@ -73,8 +80,7 @@ impl TermCanvas {
         Result::Ok(())
     }
 
-    pub fn vertical_line(&mut self,
-            start_row: usize, col: usize, length: usize) -> io::Result<()> {
+    pub fn vertical_line(&mut self, start_row: usize, col: usize, length: usize) -> io::Result<()> {
         for i in 0..length {
             self.move_to(start_row + i, col)?;
             write!(self, "\u{2502}")?;
@@ -82,9 +88,13 @@ impl TermCanvas {
         Result::Ok(())
     }
 
-    pub fn rectangle(&mut self,
-            start_row: usize, start_col: usize,
-            end_row: usize, end_col: usize) -> io::Result<()> {
+    pub fn rectangle(
+        &mut self,
+        start_row: usize,
+        start_col: usize,
+        end_row: usize,
+        end_col: usize,
+    ) -> io::Result<()> {
         self.move_to(start_row, start_col)?;
         write!(self, "\u{250C}")?;
         self.move_to(start_row, end_col)?;

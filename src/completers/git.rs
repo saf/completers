@@ -36,7 +36,12 @@ impl core::Completion for GitBranchCompletion {
         } else if self.kind == GitBranchCompletionType::RemoteBranch {
             color_string = format!("{}", color::Fg(color::LightBlack));
         }
-        format!("{}{}{}", color_string, self.branch_name, color::Fg(color::Reset))
+        format!(
+            "{}{}{}",
+            color_string,
+            self.branch_name,
+            color::Fg(color::Reset)
+        )
     }
 
     fn as_any(&self) -> &dyn any::Any {
@@ -84,9 +89,10 @@ impl core::Completer for GitBranchCompleter {
     }
 
     fn fetch_completions(&mut self) {
-        let result = Command::new("git").args(
-            &["for-each-ref", "--format=%(objecttype) %(refname:strip=2)"]
-        ).output().expect("failed to run git-for-each-ref");
+        let result = Command::new("git")
+            .args(&["for-each-ref", "--format=%(objecttype) %(refname:strip=2)"])
+            .output()
+            .expect("failed to run git-for-each-ref");
 
         if result.status.success() {
             self.all_completions.push(Arc::new(GitBranchCompletion {
@@ -96,16 +102,15 @@ impl core::Completer for GitBranchCompleter {
             for line in String::from_utf8_lossy(&result.stdout).lines() {
                 let tuple = line.split_whitespace().next_tuple();
                 if let Some((ref_type, ref_name)) = tuple {
-                    let compl_type =
-                        if ref_type == "commit" {
-                            if ref_name.contains('/') {
-                                GitBranchCompletionType::RemoteBranch
-                            } else {
-                                GitBranchCompletionType::Branch
-                            }
+                    let compl_type = if ref_type == "commit" {
+                        if ref_name.contains('/') {
+                            GitBranchCompletionType::RemoteBranch
                         } else {
-                            GitBranchCompletionType::Tag
-                        };
+                            GitBranchCompletionType::Branch
+                        }
+                    } else {
+                        GitBranchCompletionType::Tag
+                    };
                     self.all_completions.push(Arc::new(GitBranchCompletion {
                         kind: compl_type,
                         branch_name: ref_name.to_owned(),
@@ -122,11 +127,14 @@ impl core::Completer for GitBranchCompleter {
         self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
     }
 
-
     fn descend(&self, completion: &dyn core::Completion) -> Option<Box<dyn core::Completer>> {
         let completion_any = completion.as_any();
-        let branch_completion = completion_any.downcast_ref::<GitBranchCompletion>().unwrap();
-        Some(Box::new(GitCommitCompleter::new(branch_completion.branch_name.as_str())))
+        let branch_completion = completion_any
+            .downcast_ref::<GitBranchCompletion>()
+            .unwrap();
+        Some(Box::new(GitCommitCompleter::new(
+            branch_completion.branch_name.as_str(),
+        )))
     }
 }
 
@@ -143,7 +151,10 @@ impl core::Completion for GitCommitCompletion {
     }
 
     fn display_string(&self) -> String {
-        format!("{:10} {:12} {:25} {}", &self.hash, &self.date, &self.author, &self.subject)
+        format!(
+            "{:10} {:12} {:25} {}",
+            &self.hash, &self.date, &self.author, &self.subject
+        )
     }
 
     fn as_any(&self) -> &dyn any::Any {
@@ -172,8 +183,14 @@ impl GitCommitCompleter {
         let mut result = Vec::new();
         for completion_arc in completions {
             let completion_any = completion_arc.as_any();
-            let commit_completion = completion_any.downcast_ref::<GitCommitCompletion>().unwrap();
-            if commit_completion.subject.to_lowercase().contains(&self.query.to_lowercase()) {
+            let commit_completion = completion_any
+                .downcast_ref::<GitCommitCompletion>()
+                .unwrap();
+            if commit_completion
+                .subject
+                .to_lowercase()
+                .contains(&self.query.to_lowercase())
+            {
                 result.push(completion_arc.clone());
             }
         }
@@ -195,9 +212,15 @@ impl core::Completer for GitCommitCompleter {
     }
 
     fn fetch_completions(&mut self) {
-        let result = Command::new("git").args(
-            &["log", "--format=%h%x09%ad%x09%an%x09%s", "--date=short", &self.branch_name]
-        ).output().expect("failed to run git-log");
+        let result = Command::new("git")
+            .args(&[
+                "log",
+                "--format=%h%x09%ad%x09%an%x09%s",
+                "--date=short",
+                &self.branch_name,
+            ])
+            .output()
+            .expect("failed to run git-log");
 
         if result.status.success() {
             for line in String::from_utf8_lossy(&result.stdout).lines() {

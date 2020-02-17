@@ -3,8 +3,8 @@ use std::os;
 
 use termios;
 
-use term_size;
 use term_cursor;
+use term_size;
 
 const INPUT_FD: os::unix::io::RawFd = 0;
 
@@ -30,16 +30,17 @@ pub fn restore(settings: termios::Termios) -> io::Result<()> {
 ///
 /// If STDOUT is not a tty, returns `io::Error`
 pub fn get_dimensions() -> io::Result<(usize, usize)> {
-    term_size::dimensions().ok_or(
-        io::Error::new(io::ErrorKind::Other,
-                       "failed to fetch terminal dimensions")
-    )
+    term_size::dimensions().ok_or(io::Error::new(
+        io::ErrorKind::Other,
+        "failed to fetch terminal dimensions",
+    ))
 }
 
 /// Returns the cursor position within the terminal, in the form of a
 /// tuple of (row, column).
 pub fn get_cursor_position() -> io::Result<(i32, i32)> {
-    term_cursor::get_pos().or(
-        Result::Err(io::Error::new(io::ErrorKind::Other, "failed to fetch cursor position"))
-    )
+    term_cursor::get_pos().or(Result::Err(io::Error::new(
+        io::ErrorKind::Other,
+        "failed to fetch cursor position",
+    )))
 }

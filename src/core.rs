@@ -11,7 +11,7 @@ use std::sync::Arc;
 /// which is used if the completion is selected), but some completions
 /// may override that, hence the distinction between `display_string`
 /// and `result_string`.
-pub trait Completion : any::Any {
+pub trait Completion: any::Any {
     /// Returns the string which should be used as the completion.
     fn result_string(&self) -> String;
 

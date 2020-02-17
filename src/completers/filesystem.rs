@@ -5,8 +5,8 @@ use std::any;
 use std::collections::vec_deque::VecDeque;
 use std::fs;
 use std::path;
-use std::sync::Arc;
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 
 use termion::color;
@@ -35,8 +35,12 @@ impl core::Completion for FsCompletion {
 
     fn display_string(&self) -> String {
         if self.entry_type == FsEntryType::Directory {
-            format!("{}{}{}", color::Fg(color::Blue),
-                    self.result_string(), color::Fg(color::Reset))
+            format!(
+                "{}{}{}",
+                color::Fg(color::Blue),
+                self.result_string(),
+                color::Fg(color::Reset)
+            )
         } else {
             self.result_string()
         }
@@ -74,13 +78,14 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> Vec<core::Complet
     let mut entries = read_dir_result.unwrap();
     while let Some(Ok(entry)) = entries.next() {
         let entry_type = match entry.metadata() {
-            Ok(md) =>
+            Ok(md) => {
                 if md.is_dir() {
                     FsEntryType::Directory
                 } else {
                     FsEntryType::File
-                },
-            _ => FsEntryType::Error
+                }
+            }
+            _ => FsEntryType::Error,
         };
 
         let here_prefix = path::Path::new("./");
@@ -107,8 +112,11 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> Vec<core::Complet
     completions
 }
 
-fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver<()>,
-                           response_send: mpsc::Sender<Option<Vec<core::CompletionBox>>>) {
+fn fetching_thread_routine(
+    dir_path: path::PathBuf,
+    request_recv: mpsc::Receiver<()>,
+    response_send: mpsc::Sender<Option<Vec<core::CompletionBox>>>,
+) {
     let mut dir_queue: VecDeque<DirectoryQueueEntry> = VecDeque::new();
     dir_queue.push_back(DirectoryQueueEntry(dir_path, 0));
     let mut completions = Vec::new();
@@ -118,8 +126,8 @@ fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver
             Result::Ok(_) => {
                 response_send.send(Some(completions)).unwrap();
                 completions = Vec::new();
-            },
-            Result::Err(mpsc::TryRecvError::Empty) => {},
+            }
+            Result::Err(mpsc::TryRecvError::Empty) => {}
             Result::Err(mpsc::TryRecvError::Disconnected) => {
                 return;
             }
@@ -136,7 +144,7 @@ fn fetching_thread_routine(dir_path: path::PathBuf, request_recv: mpsc::Receiver
     match request_recv.recv() {
         Result::Ok(_) => {
             response_send.send(None).unwrap();
-        },
+        }
         Result::Err(_) => {
             return;
         }
@@ -174,9 +182,9 @@ impl FsCompleter {
         let (request_send, request_recv) = mpsc::channel::<()>();
         let (response_send, response_recv) = mpsc::channel::<Option<Vec<core::CompletionBox>>>();
         let dir_path_clone = dir_path.clone();
-        let thread = thread::spawn(
-            move || fetching_thread_routine(dir_path_clone, request_recv, response_send)
-        );
+        let thread = thread::spawn(move || {
+            fetching_thread_routine(dir_path_clone, request_recv, response_send)
+        });
         let bg_thread = BgThread {
             thread: thread,
             request_send: request_send,
@@ -216,7 +224,7 @@ impl core::Completer for FsCompleter {
     fn fetching_completions_finished(&self) -> bool {
         match self.fetching_thread {
             Some(_) => false,
-            None    => true,
+            None => true,
         }
     }
 
@@ -233,7 +241,7 @@ impl core::Completer for FsCompleter {
                     // We have 'taken' bg_thread out of the structure, but it turns
                     // out we have to restore it.
                     self.fetching_thread = Some(t);
-                },
+                }
                 None => {
                     t.thread.join().unwrap();
                 }
@@ -250,9 +258,9 @@ impl core::Completer for FsCompleter {
         let completion_any = completion.as_any();
         let fs_completion = completion_any.downcast_ref::<FsCompletion>().unwrap();
         match fs_completion.entry_type {
-            FsEntryType::Directory => {
-                Some(Box::new(FsCompleter::new(fs_completion.relative_path.clone())))
-            },
+            FsEntryType::Directory => Some(Box::new(FsCompleter::new(
+                fs_completion.relative_path.clone(),
+            ))),
             _ => None,
         }
     }

@@ -24,7 +24,7 @@ use completers::ui;
 /// This returns a pair representing the range [start, end).
 fn get_initial_query_range(line: &str, point: usize) -> (usize, usize) {
     let words = line.split(WORD_BOUNDARIES);
-    let mut start : usize = 0;
+    let mut start: usize = 0;
     for w in words {
         let end = start + w.len();
         if point >= start && point <= end {
@@ -67,25 +67,26 @@ fn get_completers(original_query: &str) -> Vec<Box<dyn core::Completer>> {
     }
 
     vec![
-        Box::new(filesystem::FsCompleter::new(
-                path::PathBuf::from(fs_completer_path)
-        )),
+        Box::new(filesystem::FsCompleter::new(path::PathBuf::from(
+            fs_completer_path,
+        ))),
         Box::new(git::GitBranchCompleter::new()),
     ]
 }
 
-fn get_completion_result(line: String,
-                         point: usize) -> io::Result<(String, usize)> {
+fn get_completion_result(line: String, point: usize) -> io::Result<(String, usize)> {
     let (query_start, query_end) = get_initial_query_range(&line, point);
     let original_query = (&line[query_start..query_end]).to_string();
 
     let completers = get_completers(&original_query);
     let completion = ui::get_completion(&original_query, completers)?;
 
-    let result_line = format!("{}{}{}",
-                              &line[..query_start],
-                              &completion,
-                              &line[query_end..]);
+    let result_line = format!(
+        "{}{}{}",
+        &line[..query_start],
+        &completion,
+        &line[query_end..]
+    );
     return Result::Ok((result_line, query_start + completion.len()));
 }
 
@@ -94,20 +95,26 @@ fn main() {
         .version("0.1.0")
         .author("Sławek Rudnicki <slawek.rudnicki@gmail.com>")
         .about("Extensible interactive completion for *nix shells")
-        .arg(clap::Arg::with_name("point")
-             .short("p")
-             .long("point")
-             .value_name("X") // TODO
-             .help("Current position of input point within CURRENT_LINE")
-             .required(true)
-             .takes_value(true))
-        .arg(clap::Arg::with_name("CURRENT_LINE")
-             .help("The current input line")
-             .required(true)
-             .index(1))
-        .arg(clap::Arg::with_name("debug")
-             .long("debug")
-             .help("print debug information to /tmp/completers.txt"))
+        .arg(
+            clap::Arg::with_name("point")
+                .short("p")
+                .long("point")
+                .value_name("X") // TODO
+                .help("Current position of input point within CURRENT_LINE")
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            clap::Arg::with_name("CURRENT_LINE")
+                .help("The current input line")
+                .required(true)
+                .index(1),
+        )
+        .arg(
+            clap::Arg::with_name("debug")
+                .long("debug")
+                .help("print debug information to /tmp/completers.txt"),
+        )
         .get_matches();
 
     let log_level: log::LevelFilter;
@@ -116,21 +123,20 @@ fn main() {
     } else {
         log_level = log::LevelFilter::Warn;
     }
-    simplelog::WriteLogger::init(log_level,
-                                 simplelog::Config::default(),
-                                 fs::File::create("/tmp/completers.log").unwrap()).unwrap();
+    simplelog::WriteLogger::init(
+        log_level,
+        simplelog::Config::default(),
+        fs::File::create("/tmp/completers.log").unwrap(),
+    )
+    .unwrap();
 
     let point: usize = arguments.value_of("point").unwrap().parse().unwrap();
     let line = arguments.value_of("CURRENT_LINE").unwrap().to_string();
 
     match get_completion_result(line, point) {
-        Ok((completion, point)) =>
-                writeln!(&mut std::io::stderr(),
-                        "{} {}", point, completion)
-                        .expect("Failed to write result"),
-        Err(error) =>
-                writeln!(&mut std::io::stderr(),
-                        "{}", error)
-                        .expect("Failed to write error description"),
+        Ok((completion, point)) => writeln!(&mut std::io::stderr(), "{} {}", point, completion)
+            .expect("Failed to write result"),
+        Err(error) => writeln!(&mut std::io::stderr(), "{}", error)
+            .expect("Failed to write error description"),
     };
 }

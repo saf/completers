@@ -6,14 +6,14 @@ use std::cmp;
 use std::io;
 use std::io::Write;
 use std::sync::mpsc;
-use std::time;
 use std::thread;
+use std::time;
 
 use termion;
 use termion::clear;
-use termion::input::TermRead;
 use termion::color::*;
 use termion::event::Key::*;
+use termion::input::TermRead;
 
 use crate::config::CHOOSER_HEIGHT;
 
@@ -23,9 +23,13 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
     let off = model.view_offset();
     let prompt = "  Search: ";
     let completions = model.completions();
-    let status_string = format!("[{} {}-{}/{}]", model.completer_name(), off + 1,
-                                cmp::min(off + CHOOSER_HEIGHT + 1, completions.len()),
-                                completions.len());
+    let status_string = format!(
+        "[{} {}-{}/{}]",
+        model.completer_name(),
+        off + 1,
+        cmp::min(off + CHOOSER_HEIGHT + 1, completions.len()),
+        completions.len()
+    );
 
     term_canvas.clear()?;
     write!(term_canvas, "{}{}", prompt, model.query())?;
@@ -34,16 +38,21 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
     write!(term_canvas, "{}", status_string)?;
 
     let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
-    for (i, p) in completions[off .. end_offset].iter().enumerate() {
+    for (i, p) in completions[off..end_offset].iter().enumerate() {
         let completion_string = p.display_string();
         let displayed_length = cmp::min(completion_string.len(), term_canvas.width() - 2);
         let displayed_completion = &(completion_string)[..displayed_length];
         term_canvas.move_to(i + 1, 0)?;
         if off + i == model.selection() {
-            write!(term_canvas, "{}{}{}{}{}",
-                     Bg(Black), Fg(White),
-                     displayed_completion,
-                     Fg(Reset), Bg(Reset))?;
+            write!(
+                term_canvas,
+                "{}{}{}{}{}",
+                Bg(Black),
+                Fg(White),
+                displayed_completion,
+                Fg(Reset),
+                Bg(Reset)
+            )?;
         } else {
             write!(term_canvas, "{}", displayed_completion)?;
         }
@@ -54,8 +63,10 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
     return Result::Ok(());
 }
 
-fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
-                             key_sender: mpsc::Sender<termion::event::Key>) {
+fn key_reader_thread_routine(
+    req_receiver: mpsc::Receiver<()>,
+    key_sender: mpsc::Sender<termion::event::Key>,
+) {
     let mut keys = io::stdin().keys();
     while let Result::Ok(()) = req_receiver.recv() {
         if let Some(Result::Ok(key)) = keys.next() {
@@ -69,9 +80,10 @@ fn key_reader_thread_routine(req_receiver: mpsc::Receiver<()>,
     }
 }
 
-pub fn get_completion(initial_query: &str,
-                      completers: Vec<Box<dyn core::Completer>>)
-                      -> io::Result<String> {
+pub fn get_completion(
+    initial_query: &str,
+    completers: Vec<Box<dyn core::Completer>>,
+) -> io::Result<String> {
     let term = termion::get_tty()?;
     let mut model = model::Model::new(completers);
 
@@ -83,11 +95,12 @@ pub fn get_completion(initial_query: &str,
 
     model.start_fetching_completions();
 
-    let result : String;
+    let result: String;
 
     let (key_sender, key_receiver) = mpsc::channel::<termion::event::Key>();
     let (req_sender, req_receiver) = mpsc::channel::<()>();
-    let key_reader_thread = thread::spawn(move || key_reader_thread_routine(req_receiver, key_sender));
+    let key_reader_thread =
+        thread::spawn(move || key_reader_thread_routine(req_receiver, key_sender));
     let mut req_sender = Some(req_sender);
 
     req_sender.as_ref().unwrap().send(()).unwrap();
@@ -96,7 +109,9 @@ pub fn get_completion(initial_query: &str,
 
         let key_or_nothing;
         if !model.fetching_completions_finished() {
-            key_or_nothing = key_receiver.recv_timeout(time::Duration::from_millis(10)).ok();
+            key_or_nothing = key_receiver
+                .recv_timeout(time::Duration::from_millis(10))
+                .ok();
             model.fetch_completions();
         } else {
             key_or_nothing = key_receiver.recv().ok();
@@ -104,31 +119,31 @@ pub fn get_completion(initial_query: &str,
 
         if let Some(key) = key_or_nothing {
             match key {
-                Up         => model.select_previous(),
-                Down       => model.select_next(),
-                PageUp     => model.previous_page(),
-                PageDown   => model.next_page(),
-                Home       => model.select_first(),
-                End        => model.select_last(),
+                Up => model.select_previous(),
+                Down => model.select_next(),
+                PageUp => model.previous_page(),
+                PageDown => model.next_page(),
+                Home => model.select_first(),
+                End => model.select_last(),
 
-                Left       => model.ascend(),
-                Right      => model.descend(),
+                Left => model.ascend(),
+                Right => model.descend(),
 
                 Char('\n') => {
                     if let Some(r) = model.get_selected_result() {
                         result = r;
                         break;
                     }
-                },
-                Ctrl('c')  => {
+                }
+                Ctrl('c') => {
                     result = initial_query.to_owned();
                     break;
-                },
+                }
                 Char('\t') => model.next_tab(),
-                Char(c)    => model.query_append(c),
-                Backspace  => model.query_backspace(),
+                Char(c) => model.query_append(c),
+                Backspace => model.query_backspace(),
 
-                _ => {},
+                _ => {}
             };
             req_sender.as_ref().unwrap().send(()).unwrap();
         }
@@ -148,7 +163,11 @@ pub fn clear() -> io::Result<()> {
     for _ in 0..(CHOOSER_HEIGHT + 1) {
         write!(term, "{}{}", clear::CurrentLine, termion::cursor::Down(1))?;
     }
-    write!(term, "{}{}", termion::cursor::Left(100),
-           termion::cursor::Up((CHOOSER_HEIGHT + 1) as u16))?;
+    write!(
+        term,
+        "{}{}",
+        termion::cursor::Left(100),
+        termion::cursor::Up((CHOOSER_HEIGHT + 1) as u16)
+    )?;
     return Result::Ok(());
 }
