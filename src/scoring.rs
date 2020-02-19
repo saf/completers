@@ -248,8 +248,11 @@ pub fn score(candidate: &str, query: &str, settings: &ScoringSettings) -> Score 
     if query.len() > candidate.len() {
         return 0;
     }
-    let candidate_chars = candidate.chars().collect::<Vec<_>>();
-    let query_chars = query.chars().collect::<Vec<_>>();
+    let mut candidate_chars: Vec<char> = Vec::with_capacity(candidate.len());
+    candidate_chars.extend(candidate.chars());
+    let mut query_chars: Vec<char> = Vec::with_capacity(query.len());
+    query_chars.extend(query.chars());
+
     let word_starts = word_start_indices(candidate_chars.iter());
 
     let mut scoring_array = ScoringArray::new(candidate_chars, query_chars, word_starts, settings);

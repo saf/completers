@@ -170,7 +170,6 @@ fn fetching_thread_routine(
 /// return to this level.
 pub struct FsCompleter {
     dir_path: path::PathBuf,
-    completions: Vec<core::CompletionBox>,
     fetching_thread: Option<BgThread>,
 }
 
@@ -190,7 +189,6 @@ impl FsCompleter {
 
         FsCompleter {
             dir_path: dir_path,
-            completions: vec![],
             fetching_thread: Some(bg_thread),
         }
     }
@@ -201,10 +199,6 @@ impl core::Completer for FsCompleter {
         "fs".to_owned()
     }
 
-    fn completions(&self) -> &[core::CompletionBox] {
-        &self.completions
-    }
-
     fn fetching_completions_finished(&self) -> bool {
         match self.fetching_thread {
             Some(_) => false,
@@ -212,14 +206,15 @@ impl core::Completer for FsCompleter {
         }
     }
 
-    fn fetch_completions(&mut self) {
+    fn fetch_completions(&mut self) -> Vec<core::CompletionBox> {
+        let mut fetched_completions = Vec::new();
         let bg_thread = self.fetching_thread.take();
         if let Some(t) = bg_thread {
             t.request_send.send(()).unwrap();
             let new_completions = t.response_recv.recv().unwrap();
             match new_completions {
                 Some(completions) => {
-                    self.completions.extend(completions);
+                    fetched_completions.extend(completions);
                     // We have 'taken' bg_thread out of the structure, but it turns
                     // out we have to restore it.
                     self.fetching_thread = Some(t);
@@ -229,6 +224,7 @@ impl core::Completer for FsCompleter {
                 }
             }
         }
+        fetched_completions
     }
 
     fn descend(&self, completion: &dyn core::Completion) -> Option<Box<dyn core::Completer>> {

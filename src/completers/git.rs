@@ -49,29 +49,11 @@ impl core::Completion for GitBranchCompletion {
     }
 }
 
-pub struct GitBranchCompleter {
-    all_completions: Vec<core::CompletionBox>,
-    query: String,
-    filtered_completions: Vec<core::CompletionBox>,
-}
+pub struct GitBranchCompleter {}
 
 impl GitBranchCompleter {
-    pub fn new() -> GitBranchCompleter {
-        GitBranchCompleter {
-            all_completions: vec![],
-            query: String::new(),
-            filtered_completions: vec![],
-        }
-    }
-
-    fn filter_completions(&self, completions: &[core::CompletionBox]) -> Vec<core::CompletionBox> {
-        let mut result = Vec::new();
-        for completion_arc in completions {
-            if completion_arc.result_string().contains(&self.query) {
-                result.push(completion_arc.clone());
-            }
-        }
-        result
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -80,22 +62,19 @@ impl core::Completer for GitBranchCompleter {
         "br".to_owned()
     }
 
-    fn completions(&self) -> &[core::CompletionBox] {
-        self.filtered_completions.as_slice()
-    }
-
     fn fetching_completions_finished(&self) -> bool {
         true
     }
 
-    fn fetch_completions(&mut self) {
+    fn fetch_completions(&mut self) -> Vec<core::CompletionBox> {
+        let mut fetched_completions: Vec<core::CompletionBox> = Vec::new();
         let result = Command::new("git")
             .args(&["for-each-ref", "--format=%(objecttype) %(refname:strip=2)"])
             .output()
             .expect("failed to run git-for-each-ref");
 
         if result.status.success() {
-            self.all_completions.push(Arc::new(GitBranchCompletion {
+            fetched_completions.push(Arc::new(GitBranchCompletion {
                 kind: GitBranchCompletionType::Head,
                 branch_name: "HEAD".to_owned(),
             }));
@@ -111,15 +90,14 @@ impl core::Completer for GitBranchCompleter {
                     } else {
                         GitBranchCompletionType::Tag
                     };
-                    self.all_completions.push(Arc::new(GitBranchCompletion {
+                    fetched_completions.push(Arc::new(GitBranchCompletion {
                         kind: compl_type,
                         branch_name: ref_name.to_owned(),
                     }));
                 }
             }
         }
-
-        self.filtered_completions = self.filter_completions(self.all_completions.as_slice());
+        fetched_completions
     }
 
     fn descend(&self, completion: &dyn core::Completion) -> Option<Box<dyn core::Completer>> {
@@ -163,14 +141,12 @@ impl core::Completion for GitCommitCompletion {
 
 struct GitCommitCompleter {
     branch_name: String,
-    completions: Vec<core::CompletionBox>,
 }
 
 impl GitCommitCompleter {
     fn new<B: Into<String>>(branch_name: B) -> GitCommitCompleter {
         GitCommitCompleter {
             branch_name: branch_name.into(),
-            completions: vec![],
         }
     }
 }
@@ -180,15 +156,12 @@ impl core::Completer for GitCommitCompleter {
         "co".to_owned()
     }
 
-    fn completions(&self) -> &[core::CompletionBox] {
-        &self.completions
-    }
-
     fn fetching_completions_finished(&self) -> bool {
         true
     }
 
-    fn fetch_completions(&mut self) {
+    fn fetch_completions(&mut self) -> Vec<core::CompletionBox> {
+        let mut fetched_completions: Vec<core::CompletionBox> = Vec::new();
         let result = Command::new("git")
             .args(&[
                 "log",
@@ -203,7 +176,7 @@ impl core::Completer for GitCommitCompleter {
             for line in String::from_utf8_lossy(&result.stdout).lines() {
                 let tuple = line.split('\t').next_tuple();
                 if let Some((hash, date, author, subject)) = tuple {
-                    self.completions.push(Arc::new(GitCommitCompletion {
+                    fetched_completions.push(Arc::new(GitCommitCompletion {
                         hash: hash.to_owned(),
                         date: date.to_owned(),
                         author: author.to_owned(),
@@ -212,5 +185,6 @@ impl core::Completer for GitCommitCompleter {
                 }
             }
         }
+        fetched_completions
     }
 }
