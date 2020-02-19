@@ -5,9 +5,9 @@ use crate::core;
 use crate::scoring;
 
 #[derive(Clone)]
-struct CompletionWithScore {
-    completion: core::CompletionBox,
-    score: scoring::Score,
+pub struct CompletionWithScore {
+    pub completion: core::CompletionBox,
+    pub score: scoring::Score,
 }
 
 /// Compare scored completions so that more points go first.
@@ -150,11 +150,8 @@ impl CompleterView {
         scored_completions
     }
 
-    fn completions(&self) -> Vec<core::CompletionBox> {
-        self.scored_completions
-            .iter()
-            .map(|sc| sc.completion.clone())
-            .collect()
+    fn completions(&self) -> Vec<CompletionWithScore> {
+        self.scored_completions.clone()
     }
 }
 
@@ -261,7 +258,7 @@ impl Model {
         self.current_view().completer.name()
     }
 
-    pub fn completions(&self) -> Vec<core::CompletionBox> {
+    pub fn completions(&self) -> Vec<CompletionWithScore> {
         self.current_view().completions()
     }
 
