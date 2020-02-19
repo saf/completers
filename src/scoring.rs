@@ -33,6 +33,8 @@ fn test_subsequence_match() {
     assert!(!subsequence_match("baaaar", "bar"));
 }
 
+pub type Score = u64;
+
 /// A single entry in the scoring table.
 ///
 /// See the description of the score() routine for details
@@ -40,10 +42,10 @@ fn test_subsequence_match() {
 #[derive(Clone, Copy, Default)]
 struct ScoringEntry {
     /// Score when the current position is "taken" into the matching subsequence.
-    take: u64,
+    take: Score,
 
     /// Score when the current position is omitted from the matching subsequence.
-    leave: u64,
+    leave: Score,
 }
 
 impl std::fmt::Display for ScoringEntry {
@@ -81,9 +83,9 @@ fn test_word_start_indices() {
 /// This aims to represent the configuration of assigning scores
 /// which may favor word starts or consecutive characters.
 pub struct ScoringSettings {
-    pub letter_match: u64,
-    pub subsequent_bonus: u64,
-    pub word_start_bonus: u64,
+    pub letter_match: Score,
+    pub subsequent_bonus: Score,
+    pub word_start_bonus: Score,
 }
 /// An array to store the scores for prefixes of the
 /// query and the candidate string.
@@ -152,7 +154,7 @@ impl ScoringArray<'_> {
     }
 
     /// Return the word start bonus for the given index into the "candidate".
-    fn word_start_bonus(&self, candidate_index: usize) -> u64 {
+    fn word_start_bonus(&self, candidate_index: usize) -> Score {
         if self.word_start_indices.contains(&candidate_index) {
             self.settings.word_start_bonus
         } else {
@@ -162,7 +164,7 @@ impl ScoringArray<'_> {
 
     /// Score for the given prefix of query and candidate if character is "taken"
     /// into the match.
-    fn take_score(&self, query_index: usize, candidate_index: usize) -> u64 {
+    fn take_score(&self, query_index: usize, candidate_index: usize) -> Score {
         if self.query_chars[query_index] != self.candidate_chars[candidate_index] {
             return 0;
         }
@@ -183,7 +185,7 @@ impl ScoringArray<'_> {
 
     /// Compute the score if we do not take the current character
     /// into the match.
-    fn leave_score(&self, query_index: usize, candidate_index: usize) -> u64 {
+    fn leave_score(&self, query_index: usize, candidate_index: usize) -> Score {
         if candidate_index > 0 {
             let prev = &self.array[query_index][candidate_index - 1];
             std::cmp::max(prev.take, prev.leave)
@@ -215,7 +217,7 @@ impl ScoringArray<'_> {
     ///
     /// Because the array entries represent scores for prefixes, the overall
     /// score is the score from the last array cell in the last row.
-    pub fn score(&self) -> u64 {
+    pub fn score(&self) -> Score {
         let empty = vec![];
         let array_end = self
             .array
@@ -242,7 +244,7 @@ impl std::fmt::Display for ScoringArray<'_> {
 }
 
 /// Return the score for the given query and candidate.
-pub fn score(candidate: &str, query: &str, settings: &ScoringSettings) -> u64 {
+pub fn score(candidate: &str, query: &str, settings: &ScoringSettings) -> Score {
     if query.len() > candidate.len() {
         return 0;
     }
