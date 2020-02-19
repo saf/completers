@@ -4,6 +4,33 @@ use crate::config::*;
 use crate::core;
 use crate::scoring;
 
+#[derive(Clone)]
+struct CompletionWithScore {
+    completion: core::CompletionBox,
+    score: scoring::Score,
+}
+
+/// Compare scored completions so that more points go first.
+impl Ord for CompletionWithScore {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.score.cmp(&other.score).reverse()
+    }
+}
+
+impl PartialEq for CompletionWithScore {
+    fn eq(&self, other: &Self) -> bool {
+        self.score == other.score
+    }
+}
+
+impl PartialOrd for CompletionWithScore {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Eq for CompletionWithScore {}
+
 struct CompleterView {
     /// The completer which provides the propositions for this view.
     pub completer: Box<dyn core::Completer>,
@@ -17,6 +44,17 @@ struct CompleterView {
 
     /// The current query for this completer.
     pub query: String,
+
+    /// All completions which have been fetched so far.
+    ///
+    /// This is not affected by the query.
+    all_completions: Vec<core::CompletionBox>,
+
+    /// Completions for the current query.
+    ///
+    /// This is sorted by score, so that completions with the highest
+    /// score are at the beginning of the vector.
+    scored_completions: Vec<CompletionWithScore>,
 }
 
 impl CompleterView {
@@ -26,12 +64,15 @@ impl CompleterView {
             view_offset: 0,
             selection: 0,
             query: "".to_string(),
+            all_completions: Vec::new(),
+            scored_completions: Vec::new(),
         }
     }
 
     fn selected_completion(&self) -> Option<core::CompletionBox> {
-        let completions = self.completions();
-        completions.get(self.selection).cloned()
+        self.scored_completions
+            .get(self.selection)
+            .map(|sc| sc.completion.clone())
     }
 
     pub fn select_previous(&mut self) {
@@ -42,7 +83,7 @@ impl CompleterView {
     }
 
     pub fn select_next(&mut self) {
-        let completions_count = self.completer.completions().len();
+        let completions_count = self.scored_completions.len();
         self.selection = cmp::min(self.selection + 1, completions_count.saturating_sub(1));
         if self.selection >= self.view_offset + CHOOSER_HEIGHT {
             self.view_offset = self.view_offset + 1;
@@ -57,7 +98,7 @@ impl CompleterView {
     }
 
     pub fn next_page(&mut self) {
-        let completions_count = self.completer.completions().len();
+        let completions_count = self.scored_completions.len();
         self.selection = cmp::min(self.selection + CHOOSER_HEIGHT, completions_count - 1);
         if self.selection >= self.view_offset + CHOOSER_HEIGHT {
             self.view_offset = self.selection.saturating_sub(CHOOSER_HEIGHT - 1);
@@ -70,7 +111,7 @@ impl CompleterView {
     }
 
     pub fn select_last(&mut self) {
-        let completions_count = self.completer.completions().len();
+        let completions_count = self.scored_completions.len();
         self.selection = completions_count - 1;
         self.view_offset = self.selection.saturating_sub(CHOOSER_HEIGHT - 1);
     }
@@ -79,25 +120,41 @@ impl CompleterView {
         self.selection = 0;
         self.view_offset = 0;
         self.query = new_query;
+        self.scored_completions = self.compute_scores(self.all_completions.clone())
     }
 
-    fn completions(&self) -> Vec<core::CompletionBox> {
+    fn fetch_completions(&mut self) {
+        let new_completions = self.completer.fetch_completions();
+        let new_completions_scored = self.compute_scores(new_completions.clone());
+        self.all_completions.extend(new_completions.into_iter());
+        let existing_completions_scored = self.scored_completions.drain(..);
+        self.scored_completions =
+            itertools::merge(existing_completions_scored, new_completions_scored).collect();
+    }
+
+    fn compute_scores(&self, completions: Vec<core::CompletionBox>) -> Vec<CompletionWithScore> {
         let scoring_settings = scoring::ScoringSettings {
             letter_match: 1,
             word_start_bonus: 2,
             subsequent_bonus: 3,
         };
-        let all_completions = self.completer.completions();
-        let mut filtered_completions = all_completions
-            .iter()
-            .cloned()
+        let mut scored_completions = completions
+            .into_iter()
             .filter(|c| scoring::subsequence_match(&self.query, &c.search_string()))
+            .map(|c| CompletionWithScore {
+                completion: c.clone(),
+                score: scoring::score(&c.search_string(), &self.query, &scoring_settings),
+            })
             .collect::<Vec<_>>();
-        log::info!("There are {} completions", filtered_completions.len());
-        filtered_completions.sort_by_cached_key(|c| {
-            1000u64 - scoring::score(&c.search_string(), &self.query, &scoring_settings)
-        });
-        filtered_completions
+        scored_completions.sort();
+        scored_completions
+    }
+
+    fn completions(&self) -> Vec<core::CompletionBox> {
+        self.scored_completions
+            .iter()
+            .map(|sc| sc.completion.clone())
+            .collect()
     }
 }
 
@@ -129,9 +186,10 @@ impl CompleterStack {
     /// Returns `true` if we descended anywhere, `false` if we stayed in the same view.
     fn descend(&mut self) -> bool {
         if let Some(scb) = self.top().selected_completion() {
-            if let Some(mut descended_completer) = self.top().completer.descend(&*scb) {
-                descended_completer.fetch_completions();
-                self.stack.push(CompleterView::new(descended_completer));
+            if let Some(descended_completer) = self.top().completer.descend(&*scb) {
+                let mut new_level = CompleterView::new(descended_completer);
+                new_level.fetch_completions();
+                self.stack.push(new_level);
                 return true;
             }
         }
@@ -140,9 +198,10 @@ impl CompleterStack {
 
     fn ascend(&mut self) {
         if self.stack.len() == 1 {
-            if let Some(mut new_completer) = self.top().completer.ascend() {
-                new_completer.fetch_completions();
-                self.stack[0] = CompleterView::new(new_completer);
+            if let Some(new_completer) = self.top().completer.ascend() {
+                let mut new_level = CompleterView::new(new_completer);
+                new_level.fetch_completions();
+                self.stack[0] = new_level;
             }
         } else {
             self.stack.pop();
@@ -289,12 +348,12 @@ impl Model {
 
     pub fn start_fetching_completions(&mut self) {
         for stack in &mut self.stacks {
-            stack.top_mut().completer.fetch_completions();
+            stack.top_mut().fetch_completions();
         }
     }
 
     pub fn fetch_completions(&mut self) {
-        self.current_view_mut().completer.fetch_completions();
+        self.current_view_mut().fetch_completions();
     }
 
     pub fn fetching_completions_finished(&self) -> bool {

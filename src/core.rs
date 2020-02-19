@@ -60,13 +60,6 @@ pub trait Completer {
     /// Returns the name of the completer.
     fn name(&self) -> String;
 
-    /// Returns the completions provided by this completer.
-    ///
-    /// Completers are expected to store the collection of their
-    /// completions within their structure, and return a reference to
-    /// the relevant slice from this method.
-    fn completions(&self) -> &[CompletionBox];
-
     /// Indicates if fetching completions is finished.
     ///
     /// A completer may return `false` from this method to indicate
@@ -80,11 +73,7 @@ pub trait Completer {
     ///
     /// The framework will call this until the completer returns `true`
     /// from `fetching_completions_finished`.
-    ///
-    /// The default implementation is to do nothing; this is
-    /// appropriate for completers which generate all their
-    /// completions at once.
-    fn fetch_completions(&mut self) {}
+    fn fetch_completions(&mut self) -> Vec<CompletionBox>;
 
     /// Descends into the given completion if possible, yielding a new
     /// completer. Returns None if descending is not possible for the
