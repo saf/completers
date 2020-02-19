@@ -39,22 +39,23 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
 
     let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
     for (i, p) in completions[off..end_offset].iter().enumerate() {
-        let completion_string = p.display_string();
+        let completion_string = p.completion.display_string();
         let displayed_length = cmp::min(completion_string.len(), term_canvas.width() - 2);
         let displayed_completion = &(completion_string)[..displayed_length];
         term_canvas.move_to(i + 1, 0)?;
         if off + i == model.selection() {
             write!(
                 term_canvas,
-                "{}{}{}{}{}",
+                "{}{}{} {}{}{}",
                 Bg(Black),
                 Fg(White),
+                p.score,
                 displayed_completion,
                 Fg(Reset),
                 Bg(Reset)
             )?;
         } else {
-            write!(term_canvas, "{}", displayed_completion)?;
+            write!(term_canvas, "{} {}", p.score, displayed_completion)?;
         }
     }
 
