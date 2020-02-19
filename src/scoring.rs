@@ -144,12 +144,13 @@ impl ScoringArray<'_> {
         word_start_indices: Vec<usize>,
         scoring_settings: &ScoringSettings,
     ) -> ScoringArray {
+        let query_len = query_chars.len();
         ScoringArray {
             candidate_chars: candidate_chars,
             query_chars: query_chars,
             word_start_indices: word_start_indices,
             settings: scoring_settings,
-            array: Vec::new(),
+            array: Vec::with_capacity(query_len),
         }
     }
 
@@ -205,7 +206,8 @@ impl ScoringArray<'_> {
     /// Compute all values of the scoring array.
     pub fn compute(&mut self) {
         for qi in 0..self.query_chars.len() {
-            self.array.push(Vec::new());
+            self.array
+                .push(Vec::with_capacity(self.candidate_chars.len()));
             for ci in 0..self.candidate_chars.len() {
                 let entry = self.compute_entry(qi, ci);
                 self.array[qi].push(entry);
