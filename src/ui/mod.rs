@@ -22,13 +22,13 @@ use crate::core;
 fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io::Result<()> {
     let off = model.view_offset();
     let prompt = "  Search: ";
-    let completions = model.completions();
+    let count = model.completions_count();
     let status_string = format!(
         "[{} {}-{}/{}]",
         model.completer_name(),
         off + 1,
-        cmp::min(off + CHOOSER_HEIGHT + 1, completions.len()),
-        completions.len()
+        cmp::min(off + CHOOSER_HEIGHT + 1, count),
+        count,
     );
 
     term_canvas.clear()?;
@@ -37,9 +37,10 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
     term_canvas.move_to(0, term_width - status_string.len())?;
     write!(term_canvas, "{}", status_string)?;
 
-    let end_offset = cmp::min(off + CHOOSER_HEIGHT, completions.len());
-    for (i, p) in completions[off..end_offset].iter().enumerate() {
-        let completion_string = p.completion.display_string();
+    let end_offset = cmp::min(off + CHOOSER_HEIGHT, count);
+    for i in off..end_offset {
+        let (comp, score) = model.completion_at(i);
+        let completion_string = comp.display_string();
         let displayed_length = cmp::min(completion_string.len(), term_canvas.width() - 2);
         let displayed_completion = &(completion_string)[..displayed_length];
         term_canvas.move_to(i + 1, 0)?;
@@ -49,13 +50,13 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
                 "{}{}{} {}{}{}",
                 Bg(Black),
                 Fg(White),
-                p.score,
+                score,
                 displayed_completion,
                 Fg(Reset),
                 Bg(Reset)
             )?;
         } else {
-            write!(term_canvas, "{} {}", p.score, displayed_completion)?;
+            write!(term_canvas, "{} {}", score, displayed_completion)?;
         }
     }
 

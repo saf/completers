@@ -1,35 +1,19 @@
 use std::cmp;
 
+use itertools::Itertools;
+
 use crate::config::*;
 use crate::core;
 use crate::scoring;
 
-#[derive(Clone)]
-pub struct CompletionWithScore {
-    pub completion: core::CompletionBox,
-    pub score: scoring::Score,
-}
+#[derive(Clone, Copy)]
+struct CompletionScore {
+    /// The index of the completion in the 'all_completions' vector.
+    index: usize,
 
-/// Compare scored completions so that more points go first.
-impl Ord for CompletionWithScore {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.score.cmp(&other.score).reverse()
-    }
+    /// The score of the completion referenced by 'index'.
+    score: scoring::Score,
 }
-
-impl PartialEq for CompletionWithScore {
-    fn eq(&self, other: &Self) -> bool {
-        self.score == other.score
-    }
-}
-
-impl PartialOrd for CompletionWithScore {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Eq for CompletionWithScore {}
 
 struct CompleterView {
     /// The completer which provides the propositions for this view.
@@ -54,7 +38,7 @@ struct CompleterView {
     ///
     /// This is sorted by score, so that completions with the highest
     /// score are at the beginning of the vector.
-    scored_completions: Vec<CompletionWithScore>,
+    scored_completions: Vec<CompletionScore>,
 }
 
 impl CompleterView {
@@ -72,7 +56,7 @@ impl CompleterView {
     fn selected_completion(&self) -> Option<core::CompletionBox> {
         self.scored_completions
             .get(self.selection)
-            .map(|sc| sc.completion.clone())
+            .map(|sc| self.all_completions[sc.index].clone())
     }
 
     pub fn select_previous(&mut self) {
@@ -120,38 +104,51 @@ impl CompleterView {
         self.selection = 0;
         self.view_offset = 0;
         self.query = new_query;
-        self.scored_completions = self.compute_scores(&self.all_completions);
+        self.scored_completions = self.scores(0);
     }
 
     fn fetch_completions(&mut self) {
         let new_completions = self.completer.fetch_completions();
-        let new_completions_scored = self.compute_scores(&new_completions);
+        let score_start_index = self.all_completions.len();
         self.all_completions.extend(new_completions.into_iter());
-        let existing_completions_scored = self.scored_completions.drain(..);
+        let new_completion_scores = self.scores(score_start_index);
+        let existing_completion_scores = self.scored_completions.drain(..);
         self.scored_completions =
-            itertools::merge(existing_completions_scored, new_completions_scored).collect();
+            existing_completion_scores.merge_by(
+                new_completion_scores,
+                |a, b| a.score >= b.score,
+            ).collect();
     }
 
-    fn compute_scores(&self, completions: &Vec<core::CompletionBox>) -> Vec<CompletionWithScore> {
+    fn scores(&self, score_start_index: usize) -> Vec<CompletionScore> {
         let scoring_settings = scoring::ScoringSettings {
             letter_match: 1,
             word_start_bonus: 2,
             subsequent_bonus: 3,
         };
-        let mut scored_completions = completions
+        let mut completion_scores = self.all_completions[score_start_index..]
             .iter()
-            .filter(|c| scoring::subsequence_match(&self.query, &c.search_string()))
-            .map(|c| CompletionWithScore {
-                completion: c.clone(),
+            .enumerate()
+            .filter(|(_, c)| scoring::subsequence_match(&self.query, &c.search_string()))
+            .map(|(i, c)| CompletionScore {
                 score: scoring::score(&c.search_string(), &self.query, &scoring_settings),
+                index: score_start_index + i,
             })
             .collect::<Vec<_>>();
-        scored_completions.sort();
-        scored_completions
+        completion_scores.sort_by(|a, b| a.score.cmp(&b.score).reverse());
+        completion_scores
     }
 
-    fn completions(&self) -> Vec<CompletionWithScore> {
-        self.scored_completions.clone()
+    /// Returns the completion at the specified index in 'scored_completions'
+    /// along with its score.
+    fn completion_at(&self, index: usize) -> (&dyn core::Completion, scoring::Score) {
+        let sc = self.scored_completions[index];
+        (&*self.all_completions[sc.index], sc.score)
+    }
+
+    /// Return the number of completions after applying the current query filter.
+    fn completions_count(&self) -> usize {
+        self.scored_completions.len()
     }
 }
 
@@ -258,8 +255,12 @@ impl Model {
         self.current_view().completer.name()
     }
 
-    pub fn completions(&self) -> Vec<CompletionWithScore> {
-        self.current_view().completions()
+    pub fn completion_at(&self, index: usize) -> (&dyn core::Completion, scoring::Score) {
+        self.current_view().completion_at(index)
+    }
+
+    pub fn completions_count(&self) -> usize {
+        self.current_view().completions_count()
     }
 
     pub fn get_selected_result(&self) -> Option<String> {
