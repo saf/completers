@@ -53,10 +53,10 @@ impl CompleterView {
         }
     }
 
-    fn selected_completion(&self) -> Option<core::CompletionBox> {
+    fn selected_completion(&self) -> Option<&dyn core::Completion> {
         self.scored_completions
             .get(self.selection)
-            .map(|sc| self.all_completions[sc.index].clone())
+            .map(|sc| &*self.all_completions[sc.index] as &dyn core::Completion)
     }
 
     pub fn select_previous(&mut self) {
@@ -180,7 +180,7 @@ impl CompleterStack {
     /// Returns `true` if we descended anywhere, `false` if we stayed in the same view.
     fn descend(&mut self) -> bool {
         if let Some(scb) = self.top().selected_completion() {
-            if let Some(descended_completer) = self.top().completer.descend(&*scb) {
+            if let Some(descended_completer) = self.top().completer.descend(scb) {
                 let mut new_level = CompleterView::new(descended_completer);
                 new_level.fetch_completions();
                 self.stack.push(new_level);

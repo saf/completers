@@ -2,7 +2,6 @@
 //! completions and completion providers (aka Completers).
 
 use std::any;
-use std::sync::Arc;
 
 /// A trait representing a single completion.
 ///
@@ -50,7 +49,7 @@ pub trait Completion: any::Any {
 /// completions as collections of Arcs to `core::Completion` trait
 /// objects and return references to those collections from their
 /// `completions` methods.
-pub type CompletionBox = Arc<dyn Completion + Sync + Send>;
+pub type CompletionBox = Box<dyn Completion + Send + Sync>;
 
 /// A trait for types which provide completions.
 ///

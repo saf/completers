@@ -6,7 +6,6 @@ use std::collections::vec_deque::VecDeque;
 use std::fs;
 use std::path;
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::thread;
 
 use termion::color;
@@ -102,7 +101,7 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> Vec<core::Complet
             queue.push_back(DirectoryQueueEntry(path.clone(), depth + 1));
         }
 
-        completions.push(Arc::new(FsCompletion {
+        completions.push(Box::new(FsCompletion {
             relative_path: path,
             entry_type: entry_type,
         }));

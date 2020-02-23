@@ -2,7 +2,6 @@
 
 use std::any;
 use std::process::Command;
-use std::sync::Arc;
 
 use itertools::Itertools;
 use termion::color;
@@ -74,7 +73,7 @@ impl core::Completer for GitBranchCompleter {
             .expect("failed to run git-for-each-ref");
 
         if result.status.success() {
-            fetched_completions.push(Arc::new(GitBranchCompletion {
+            fetched_completions.push(Box::new(GitBranchCompletion {
                 kind: GitBranchCompletionType::Head,
                 branch_name: "HEAD".to_owned(),
             }));
@@ -90,7 +89,7 @@ impl core::Completer for GitBranchCompleter {
                     } else {
                         GitBranchCompletionType::Tag
                     };
-                    fetched_completions.push(Arc::new(GitBranchCompletion {
+                    fetched_completions.push(Box::new(GitBranchCompletion {
                         kind: compl_type,
                         branch_name: ref_name.to_owned(),
                     }));
@@ -176,7 +175,7 @@ impl core::Completer for GitCommitCompleter {
             for line in String::from_utf8_lossy(&result.stdout).lines() {
                 let tuple = line.split('\t').next_tuple();
                 if let Some((hash, date, author, subject)) = tuple {
-                    fetched_completions.push(Arc::new(GitCommitCompletion {
+                    fetched_completions.push(Box::new(GitCommitCompletion {
                         hash: hash.to_owned(),
                         date: date.to_owned(),
                         author: author.to_owned(),
