@@ -106,7 +106,6 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> Vec<core::Complet
             entry_type: entry_type,
         }));
     }
-    completions.sort_by_key(|c| c.result_string());
     completions
 }
 
