@@ -1,3 +1,4 @@
+extern crate array2d;
 extern crate itertools;
 extern crate libc;
 extern crate log;

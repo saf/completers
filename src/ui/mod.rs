@@ -43,8 +43,8 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
         let completion_string = comp.display_string();
         let displayed_length = cmp::min(completion_string.len(), term_canvas.width() - 2);
         let displayed_completion = &(completion_string)[..displayed_length];
-        term_canvas.move_to(i + 1, 0)?;
-        if off + i == model.selection() {
+        term_canvas.move_to(i - off + 1, 0)?;
+        if i == model.selection() {
             write!(
                 term_canvas,
                 "{}{}{} {}{}{}",

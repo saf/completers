@@ -2,6 +2,8 @@
 
 use std::borrow::Borrow;
 
+use array2d::Array2D;
+
 /// Indicate if the given string matches the query.
 ///
 /// A match occurs when the query is a subsequence
@@ -133,7 +135,14 @@ struct ScoringArray<'a> {
     query_chars: Vec<char>,
     word_start_indices: Vec<usize>,
     settings: &'a ScoringSettings,
-    array: Vec<Vec<ScoringEntry>>,
+
+    /// The array for the dynamic algorithm, storing entries
+    /// with the "take" and "leave" values.
+    ///
+    /// To avoid excess heap allocations, we're using an
+    /// array2d::Array2D to access a single storage vector
+    /// as if it was a two-dimensional array.
+    array: Array2D<ScoringEntry>,
 }
 
 impl ScoringArray<'_> {
@@ -145,12 +154,13 @@ impl ScoringArray<'_> {
         scoring_settings: &ScoringSettings,
     ) -> ScoringArray {
         let query_len = query_chars.len();
+        let candidate_len = candidate_chars.len();
         ScoringArray {
             candidate_chars: candidate_chars,
             query_chars: query_chars,
             word_start_indices: word_start_indices,
             settings: scoring_settings,
-            array: Vec::with_capacity(query_len),
+            array: Array2D::filled_with(Default::default(), query_len, candidate_len),
         }
     }
 
@@ -171,7 +181,7 @@ impl ScoringArray<'_> {
         }
 
         let score_from_prev = if query_index > 0 && candidate_index > 0 {
-            let prev = self.array[query_index - 1][candidate_index - 1];
+            let prev = &self.array.get(query_index - 1, candidate_index - 1).unwrap();
             let take_prev_score = if prev.take > 0 {
                 prev.take + self.settings.subsequent_bonus
             } else {
@@ -188,7 +198,7 @@ impl ScoringArray<'_> {
     /// into the match.
     fn leave_score(&self, query_index: usize, candidate_index: usize) -> Score {
         if candidate_index > 0 {
-            let prev = &self.array[query_index][candidate_index - 1];
+            let prev = &self.array.get(query_index, candidate_index - 1).unwrap();
             std::cmp::max(prev.take, prev.leave)
         } else {
             0
@@ -206,11 +216,8 @@ impl ScoringArray<'_> {
     /// Compute all values of the scoring array.
     pub fn compute(&mut self) {
         for qi in 0..self.query_chars.len() {
-            self.array
-                .push(Vec::with_capacity(self.candidate_chars.len()));
             for ci in 0..self.candidate_chars.len() {
-                let entry = self.compute_entry(qi, ci);
-                self.array[qi].push(entry);
+                self.array.set(qi, ci, self.compute_entry(qi, ci)).unwrap();
             }
         }
     }
@@ -220,24 +227,26 @@ impl ScoringArray<'_> {
     /// Because the array entries represent scores for prefixes, the overall
     /// score is the score from the last array cell in the last row.
     pub fn score(&self) -> Score {
-        let empty = vec![];
-        let array_end = self
-            .array
-            .last()
-            .unwrap_or(&empty)
-            .last()
-            .unwrap_or(&ScoringEntry { take: 0, leave: 0 });
-        std::cmp::max(array_end.take, array_end.leave)
+        if self.query_chars.len() > 0 && self.candidate_chars.len() > 0 {
+            let last_entry = self.array.get(
+                self.array.num_rows() - 1,
+                self.array.num_columns() - 1
+            ).unwrap();
+            std::cmp::max(last_entry.take, last_entry.leave)
+        } else {
+            0
+        }
+
     }
 }
 
 impl std::fmt::Display for ScoringArray<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "   {}", self.candidate_chars.iter().collect::<String>())?;
-        for (i, row) in self.array.iter().enumerate() {
+        for i in 0..self.array.num_rows() {
             write!(f, "{}  ", self.query_chars[i])?;
-            for entry in row {
-                write!(f, "{} ", entry)?;
+            for j in 0..self.array.num_columns() {
+                write!(f, "{} ", self.array.get(i, j).unwrap())?;
             }
             writeln!(f, "")?;
         }

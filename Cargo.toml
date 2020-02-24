@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Sławek Rudnicki <slawek.rudnicki@gmail.com>"]
 
 [dependencies]
+array2d = "0.2.1"
 clap = "2.24.2"
 itertools = "0.6.0"
 libc = "0.2.23"
