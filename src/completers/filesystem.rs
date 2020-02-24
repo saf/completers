@@ -75,7 +75,7 @@ fn directory_bfs(queue: &mut VecDeque<DirectoryQueueEntry>) -> Vec<core::Complet
     }
     let mut entries = read_dir_result.unwrap();
     while let Some(Ok(entry)) = entries.next() {
-        let entry_type = match entry.metadata() {
+        let entry_type = match entry.file_type() {
             Ok(md) => {
                 if md.is_dir() {
                     FsEntryType::Directory
