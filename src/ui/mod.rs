@@ -11,7 +11,6 @@ use std::time;
 
 use termion;
 use termion::clear;
-use termion::color::*;
 use termion::event::Key::*;
 use termion::input::TermRead;
 
@@ -47,13 +46,11 @@ fn print_state(term_canvas: &mut canvas::TermCanvas, model: &model::Model) -> io
         if i == model.selection() {
             write!(
                 term_canvas,
-                "{}{}{} {}{}{}",
-                Bg(Black),
-                Fg(White),
+                "{}{} {}{}",
+                termion::style::Invert,
                 score,
                 displayed_completion,
-                Fg(Reset),
-                Bg(Reset)
+                termion::style::Reset,
             )?;
         } else {
             write!(term_canvas, "{} {}", score, displayed_completion)?;
