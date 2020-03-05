@@ -181,7 +181,10 @@ impl ScoringArray<'_> {
         }
 
         let score_from_prev = if query_index > 0 && candidate_index > 0 {
-            let prev = &self.array.get(query_index - 1, candidate_index - 1).unwrap();
+            let prev = &self
+                .array
+                .get(query_index - 1, candidate_index - 1)
+                .unwrap();
             let take_prev_score = if prev.take > 0 {
                 prev.take + self.settings.subsequent_bonus
             } else {
@@ -228,15 +231,14 @@ impl ScoringArray<'_> {
     /// score is the score from the last array cell in the last row.
     pub fn score(&self) -> Score {
         if self.query_chars.len() > 0 && self.candidate_chars.len() > 0 {
-            let last_entry = self.array.get(
-                self.array.num_rows() - 1,
-                self.array.num_columns() - 1
-            ).unwrap();
+            let last_entry = self
+                .array
+                .get(self.array.num_rows() - 1, self.array.num_columns() - 1)
+                .unwrap();
             std::cmp::max(last_entry.take, last_entry.leave)
         } else {
             0
         }
-
     }
 }
 
@@ -262,7 +264,12 @@ pub fn score(candidate: &str, query: &str, settings: &ScoringSettings) -> Score 
     let mut candidate_chars: Vec<char> = Vec::with_capacity(candidate.len());
     candidate_chars.extend(candidate.chars().map(|c| c.to_ascii_lowercase()));
     let mut query_chars: Vec<char> = Vec::with_capacity(query.len());
-    query_chars.extend(query.chars().filter(|c| !c.is_whitespace()).map(|c| c.to_ascii_lowercase()));
+    query_chars.extend(
+        query
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .map(|c| c.to_ascii_lowercase()),
+    );
 
     let word_starts = word_start_indices(candidate_chars.iter());
 

@@ -113,11 +113,9 @@ impl CompleterView {
         self.all_completions.extend(new_completions.into_iter());
         let new_completion_scores = self.scores(score_start_index);
         let existing_completion_scores = self.scored_completions.drain(..);
-        self.scored_completions =
-            existing_completion_scores.merge_by(
-                new_completion_scores,
-                |a, b| a.score >= b.score,
-            ).collect();
+        self.scored_completions = existing_completion_scores
+            .merge_by(new_completion_scores, |a, b| a.score >= b.score)
+            .collect();
     }
 
     fn scores(&self, score_start_index: usize) -> Vec<CompletionScore> {
