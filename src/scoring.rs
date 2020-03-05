@@ -11,7 +11,7 @@ use array2d::Array2D;
 pub fn subsequence_match(query: &str, string: &str) -> bool {
     let string = string.to_ascii_lowercase();
     let mut s: &str = string.as_ref();
-    let chars = query.chars();
+    let chars = query.chars().filter(|c| !c.is_whitespace());
     for c in chars {
         match s.find(c) {
             None => return false,
@@ -260,9 +260,9 @@ pub fn score(candidate: &str, query: &str, settings: &ScoringSettings) -> Score 
         return 0;
     }
     let mut candidate_chars: Vec<char> = Vec::with_capacity(candidate.len());
-    candidate_chars.extend(candidate.chars());
+    candidate_chars.extend(candidate.chars().map(|c| c.to_ascii_lowercase()));
     let mut query_chars: Vec<char> = Vec::with_capacity(query.len());
-    query_chars.extend(query.chars());
+    query_chars.extend(query.chars().filter(|c| !c.is_whitespace()).map(|c| c.to_ascii_lowercase()));
 
     let word_starts = word_start_indices(candidate_chars.iter());
 
